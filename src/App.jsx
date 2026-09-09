@@ -210,42 +210,32 @@ async function staffList() {
    통합본은 아동을 `child:<id>` 키에 하나씩 저장한다.
    이름만 서버에서 뽑아 오므로 전송량이 작다 (아동 한 명당 수십 바이트).
    예전 방식(gd-aba-v5-children 한 덩어리)으로 저장된 경우도 대비해 둔다. */
+/* 아동 목록 읽기
+   서버 함수 rein_child_list() 가 이름·담당자만 뽑아 돌려준다.
+   아동 데이터를 통째로 받지 않으므로 전송량이 거의 들지 않는다.
+   함수가 아직 없는 환경을 대비해 예전 방식도 남겨 둔다. */
 async function loadChildren() {
-  const base = SUPABASE_URL + "/rest/v1/aba_data?user_id=eq." + ABA_OWNER_ID;
-
-  // 1) 아동별 키에서 이름만 뽑아 오기
-  const url =
-    base +
-    "&key=like.child:*" +
-    "&select=key,nm:value->info->>name,ow:value->info->>ownerName," +
-    "arch:value->info->>archivedAt,del:value->>deletedAt";
-  const r = await authedFetch(url);
-  if (r.ok) {
-    const rows = await r.json();
-    if (rows && rows.length > 0) {
-      const list = rows
-        .filter(function (x) {
-          return !x.del && !x.arch;
-        })
-        .map(function (x) {
-          return {
-            id: String(x.key).replace(/^child:/, ""),
-            name: x.nm || "(이름 없음)",
-            owner: x.ow || "",
-          };
-        });
-      if (list.length > 0) {
-        list.sort(function (a, b) {
-          return a.name.localeCompare(b.name, "ko");
-        });
-        return list;
-      }
+  // 1) 서버 함수
+  try {
+    const rows = await rpc("rein_child_list", {}, true);
+    if (Array.isArray(rows) && rows.length > 0) {
+      return rows.map(function (x) {
+        return { id: x.id, name: x.name || "(이름 없음)", owner: x.owner || "" };
+      });
     }
+    if (Array.isArray(rows)) return [];
+  } catch (e) {
+    /* 함수가 없으면 아래 예전 방식으로 */
   }
 
   // 2) 예전 방식 — 한 덩어리로 저장된 경우
   const r2 = await authedFetch(
-    base + "&key=eq." + encodeURIComponent(CHILDREN_KEY) + "&select=value"
+    SUPABASE_URL +
+      "/rest/v1/aba_data?user_id=eq." +
+      ABA_OWNER_ID +
+      "&key=eq." +
+      encodeURIComponent(CHILDREN_KEY) +
+      "&select=value"
   );
   if (!r2.ok) throw new Error("아동 목록을 읽지 못했습니다 (HTTP " + r2.status + ")");
   const rows2 = await r2.json();
