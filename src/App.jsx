@@ -88,7 +88,7 @@ async function getAccessToken() {
   const s = getSession();
   if (!s) return null;
   const nowSec = Math.floor(Date.now() / 1000);
-  if (s.expires_at && s.expires_at > nowSec + 300 && s.access_token) {
+  if (s.expires_at && s.expires_at > nowSec + 60 && s.access_token) {
     return s.access_token;
   }
   if (s.refresh_token) {
@@ -105,6 +105,38 @@ async function staffHeaders() {
     Authorization: "Bearer " + (token || SUPABASE_ANON_KEY),
     "Content-Type": "application/json",
   };
+}
+
+/* 토큰이 만료됐으면 새로 받아 한 번 다시 시도한다.
+   그래도 안 되면 세션을 비우고 로그인 화면으로 돌린다. */
+async function forceRefresh() {
+  const s = getSession();
+  if (!s || !s.refresh_token) return null;
+  return await refreshSession(s.refresh_token);
+}
+
+async function authedFetch(url, opts, retried) {
+  const base = await staffHeaders();
+  const o = opts || {};
+  const r = await fetch(url, {
+    method: o.method || "GET",
+    headers: Object.assign({}, base, o.headers || {}),
+    body: o.body,
+  });
+  if (r.status === 401 || r.status === 403) {
+    if (!retried) {
+      const fresh = await forceRefresh();
+      if (fresh) return authedFetch(url, opts, true);
+    }
+    saveSession(null);
+    try {
+      window.location.reload();
+    } catch (e) {
+      /* 새로고침이 막혀 있어도 아래 오류로 알린다 */
+    }
+    throw new Error("로그인이 만료되었습니다. 다시 로그인해 주세요.");
+  }
+  return r;
 }
 
 function anonHeaders() {
@@ -135,12 +167,11 @@ async function signIn(email, password) {
 }
 
 async function rpc(name, body, useStaff) {
-  const headers = useStaff ? await staffHeaders() : anonHeaders();
-  const r = await fetch(SUPABASE_URL + "/rest/v1/rpc/" + name, {
-    method: "POST",
-    headers: headers,
-    body: JSON.stringify(body || {}),
-  });
+  const url = SUPABASE_URL + "/rest/v1/rpc/" + name;
+  const payload = JSON.stringify(body || {});
+  const r = useStaff
+    ? await authedFetch(url, { method: "POST", body: payload })
+    : await fetch(url, { method: "POST", headers: anonHeaders(), body: payload });
   if (!r.ok) {
     const t = await r.text().catch(function () {
       return "";
@@ -176,7 +207,6 @@ async function staffList() {
 }
 
 async function loadChildren() {
-  const headers = await staffHeaders();
   const url =
     SUPABASE_URL +
     "/rest/v1/aba_data?user_id=eq." +
@@ -184,7 +214,7 @@ async function loadChildren() {
     "&key=eq." +
     encodeURIComponent(CHILDREN_KEY) +
     "&select=value";
-  const r = await fetch(url, { headers: headers });
+  const r = await authedFetch(url);
   if (!r.ok) throw new Error("아동 목록을 읽지 못했습니다 (HTTP " + r.status + ")");
   const rows = await r.json();
   if (!rows || rows.length === 0) return [];
@@ -217,10 +247,9 @@ async function loadChildren() {
 }
 
 async function createLink(child, assignedTo) {
-  const headers = await staffHeaders();
-  const r = await fetch(SUPABASE_URL + "/rest/v1/rein_links", {
+  const r = await authedFetch(SUPABASE_URL + "/rest/v1/rein_links", {
     method: "POST",
-    headers: Object.assign({}, headers, { Prefer: "return=representation" }),
+    headers: { Prefer: "return=representation" },
     body: JSON.stringify({
       child_id: child.id,
       child_name: child.name,
@@ -235,52 +264,47 @@ async function createLink(child, assignedTo) {
 }
 
 async function loadSurveys() {
-  const headers = await staffHeaders();
   const url =
     SUPABASE_URL +
     "/rest/v1/rein_surveys?select=id,child_id,child_name,answers,assigned_to,submitted_at" +
     "&order=submitted_at.desc&limit=300";
-  const r = await fetch(url, { headers: headers });
+  const r = await authedFetch(url);
   if (!r.ok) throw new Error("응답을 읽지 못했습니다 (HTTP " + r.status + ")");
   return await r.json();
 }
 
 async function assignSurvey(id, userId) {
-  const headers = await staffHeaders();
-  const r = await fetch(SUPABASE_URL + "/rest/v1/rein_surveys?id=eq." + id, {
+  const r = await authedFetch(SUPABASE_URL + "/rest/v1/rein_surveys?id=eq." + id, {
     method: "PATCH",
-    headers: Object.assign({}, headers, { Prefer: "return=minimal" }),
+    headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ assigned_to: userId || null }),
   });
   if (!r.ok) throw new Error("배정하지 못했습니다 (HTTP " + r.status + ")");
 }
 
 async function loadLinks() {
-  const headers = await staffHeaders();
   const url =
     SUPABASE_URL +
     "/rest/v1/rein_links?select=token,child_id,child_name,owner_name,assigned_to,created_at,expires_at" +
     "&order=created_at.desc&limit=200";
-  const r = await fetch(url, { headers: headers });
+  const r = await authedFetch(url);
   if (!r.ok) throw new Error("링크 목록을 읽지 못했습니다 (HTTP " + r.status + ")");
   return await r.json();
 }
 
 async function loadInquiries() {
-  const headers = await staffHeaders();
   const url =
     SUPABASE_URL +
     "/rest/v1/inquiries?select=*&order=created_at.desc&limit=300";
-  const r = await fetch(url, { headers: headers });
+  const r = await authedFetch(url);
   if (!r.ok) throw new Error("문의를 읽지 못했습니다 (HTTP " + r.status + ")");
   return await r.json();
 }
 
 async function patchInquiry(id, changes) {
-  const headers = await staffHeaders();
-  const r = await fetch(SUPABASE_URL + "/rest/v1/inquiries?id=eq." + id, {
+  const r = await authedFetch(SUPABASE_URL + "/rest/v1/inquiries?id=eq." + id, {
     method: "PATCH",
-    headers: Object.assign({}, headers, { Prefer: "return=representation" }),
+    headers: { Prefer: "return=representation" },
     body: JSON.stringify(changes),
   });
   if (!r.ok) throw new Error("저장하지 못했습니다 (HTTP " + r.status + ")");
