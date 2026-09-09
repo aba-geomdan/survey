@@ -31,9 +31,9 @@ const PK = "#F5A0B1";
 const PKD = "#D4728A";
 const PKL = "#FFF0F3";
 
-const STATUSES = ["신규", "상담예정", "상담완료", "등록", "미등록", "대기"];
+const STATUSES = ["상담예정", "등록", "미등록"];
 function badgeClass(s) {
-  if (s === "신규") return "badge-new";
+  if (s === "상담예정") return "badge-new";
   if (s === "미등록") return "badge-off";
   return "";
 }
@@ -480,7 +480,11 @@ function validateAnswers(qs, answers) {
       });
       if (filled.length < 3) e[q.id] = "적어도 3개는 적어주세요.";
     }
-    if (q.type === "line" || q.type === "date" || q.type === "tel" || q.type === "text") {
+    if (q.type === "date") {
+      const p = (a.v || "").split("-");
+      if (p.length !== 3 || !p[0] || !p[1] || !p[2]) e[q.id] = "연도·월·일을 모두 골라주세요.";
+    }
+    if (q.type === "line" || q.type === "tel" || q.type === "text") {
       if (!(a.v || "").trim()) e[q.id] = "적어주세요.";
     }
   });
@@ -501,6 +505,91 @@ function Chip(props) {
     >
       {props.children}
     </button>
+  );
+}
+
+/* 생년월일 — 달력을 넘기지 않고 연·월·일을 골라서 넣는다 */
+function DatePick(props) {
+  const parts = (props.value || "").split("-");
+  const y = parts[0] || "";
+  const m = parts[1] || "";
+  const d = parts[2] || "";
+
+  const thisYear = new Date().getFullYear();
+  const years = [];
+  for (let i = thisYear; i >= thisYear - 25; i--) years.push(String(i));
+
+  const months = [];
+  for (let i = 1; i <= 12; i++) months.push(i < 10 ? "0" + i : String(i));
+
+  function daysIn(yy, mm) {
+    if (!yy || !mm) return 31;
+    return new Date(Number(yy), Number(mm), 0).getDate();
+  }
+  const days = [];
+  for (let i = 1; i <= daysIn(y, m); i++) days.push(i < 10 ? "0" + i : String(i));
+
+  function set(ny, nm, nd) {
+    // 2월 30일 같은 값이 남지 않도록 일자를 잘라낸다
+    let dd = nd;
+    if (ny && nm && dd) {
+      const max = daysIn(ny, nm);
+      if (Number(dd) > max) dd = String(max);
+    }
+    props.onChange(ny || nm || dd ? [ny, nm, dd].join("-") : "");
+  }
+
+  return (
+    <div className="dpick">
+      <select
+        className="inp sel"
+        value={y}
+        onChange={function (e) {
+          set(e.target.value, m, d);
+        }}
+      >
+        <option value="">연도</option>
+        {years.map(function (v) {
+          return (
+            <option key={v} value={v}>
+              {v}년
+            </option>
+          );
+        })}
+      </select>
+      <select
+        className="inp sel"
+        value={m}
+        onChange={function (e) {
+          set(y, e.target.value, d);
+        }}
+      >
+        <option value="">월</option>
+        {months.map(function (v) {
+          return (
+            <option key={v} value={v}>
+              {Number(v)}월
+            </option>
+          );
+        })}
+      </select>
+      <select
+        className="inp sel"
+        value={d}
+        onChange={function (e) {
+          set(y, m, e.target.value);
+        }}
+      >
+        <option value="">일</option>
+        {days.map(function (v) {
+          return (
+            <option key={v} value={v}>
+              {Number(v)}일
+            </option>
+          );
+        })}
+      </select>
+    </div>
   );
 }
 
@@ -774,11 +863,24 @@ function QuestionList(props) {
           );
         }
 
+        if (q.type === "date") {
+          return (
+            <Field key={q.id} {...common}>
+              <DatePick
+                value={a.v}
+                onChange={function (val) {
+                  patch(q.id, { v: val });
+                }}
+              />
+            </Field>
+          );
+        }
+
         return (
           <Field key={q.id} {...common}>
             <input
               className="inp"
-              type={q.type === "date" ? "date" : q.type === "tel" ? "tel" : "text"}
+              type={q.type === "tel" ? "tel" : "text"}
               inputMode={q.type === "tel" ? "tel" : undefined}
               placeholder={q.placeholder || ""}
               value={a.v}
@@ -2093,6 +2195,13 @@ const CSS = `
   background: #fff; color: var(--ink); }
 .inp:focus { outline: none; border-color: var(--pk); box-shadow: 0 0 0 3px var(--pkl); }
 .ta { resize: vertical; line-height: 1.7; }
+.dpick { display: flex; gap: 8px; }
+.sel { flex: 1; min-width: 0; appearance: none; -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--pkd) 50%),
+    linear-gradient(135deg, var(--pkd) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  padding-right: 30px; }
 
 .ranks { display: flex; flex-direction: column; gap: 2px; }
 .rank-row { display: flex; align-items: center; gap: 10px; }
