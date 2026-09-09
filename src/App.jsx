@@ -982,9 +982,8 @@ function InquiryForm() {
 
   if (phase === "done")
     return (
-      <Msg title="신청이 접수되었습니다">
-        2~3일 안에 적어주신 번호로 연락드려 상담 일정을 잡아드리겠습니다.
-        감사합니다.
+      <Msg title="작성해 주셔서 감사합니다">
+        상담 때 뵙겠습니다.
       </Msg>
     );
 
@@ -992,9 +991,11 @@ function InquiryForm() {
     <div className="wrap">
       <header className="hero">
         <p className="hero-kicker">검단ABA언어행동연구소</p>
-        <h1 className="hero-title">상담 신청</h1>
+        <h1 className="hero-title">상담 전 사전 설문</h1>
         <p className="hero-body">
-          접수 후 2~3일 안에 연락드려 상담 일정을 잡아드립니다. 약 3분 걸립니다.
+          상담 예약이 완료되었습니다. 상담 전에 아이에 대해 미리 알아두면 좋을
+          내용을 여쭙습니다. 약 3분 걸립니다. 미리 작성해 주시면 상담 시간을 더
+          충실하게 쓸 수 있습니다.
         </p>
       </header>
 
@@ -1008,10 +1009,10 @@ function InquiryForm() {
 
       {sendError ? <p className="send-err">{sendError}</p> : null}
       <button className="submit" onClick={submit} disabled={phase === "sending"}>
-        {phase === "sending" ? "보내는 중…" : "신청하기"}
+        {phase === "sending" ? "보내는 중…" : "제출하기"}
       </button>
       <p className="foot">
-        적어주신 내용은 상담 진행에만 사용되며, 담당자만 확인합니다.
+        적어주신 내용은 상담 준비에만 사용되며, 담당자만 확인합니다.
       </p>
     </div>
   );
@@ -1362,7 +1363,7 @@ function InquiryTab(props) {
   return (
     <div>
       <div className="pub">
-        <p className="pub-label">학부모께 안내할 상담 신청 주소</p>
+        <p className="pub-label">상담 전 사전 설문 주소</p>
         <p className="made-url">{props.publicUrl}</p>
         <button
           className="submit sm"
@@ -1373,7 +1374,8 @@ function InquiryTab(props) {
           {props.copied === "pub" ? "복사했습니다" : "주소 복사"}
         </button>
         <p className="made-hint">
-          홈페이지·인스타그램 프로필·블로그에 이 주소를 걸어두세요. 만료되지 않습니다.
+          상담 일정을 잡으신 뒤 학부모께 문자로 보내주세요. 주소는 하나로 고정이며
+          만료되지 않습니다.
         </p>
       </div>
 
