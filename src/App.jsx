@@ -206,28 +206,60 @@ async function staffList() {
   return await rpc("rein_staff_list", {}, true);
 }
 
+/* 아동 목록 읽기
+   통합본은 아동을 `child:<id>` 키에 하나씩 저장한다.
+   이름만 서버에서 뽑아 오므로 전송량이 작다 (아동 한 명당 수십 바이트).
+   예전 방식(gd-aba-v5-children 한 덩어리)으로 저장된 경우도 대비해 둔다. */
 async function loadChildren() {
+  const base = SUPABASE_URL + "/rest/v1/aba_data?user_id=eq." + ABA_OWNER_ID;
+
+  // 1) 아동별 키에서 이름만 뽑아 오기
   const url =
-    SUPABASE_URL +
-    "/rest/v1/aba_data?user_id=eq." +
-    ABA_OWNER_ID +
-    "&key=eq." +
-    encodeURIComponent(CHILDREN_KEY) +
-    "&select=value";
+    base +
+    "&key=like.child:*" +
+    "&select=key,nm:value->info->>name,ow:value->info->>ownerName," +
+    "arch:value->info->>archivedAt,del:value->>deletedAt";
   const r = await authedFetch(url);
-  if (!r.ok) throw new Error("아동 목록을 읽지 못했습니다 (HTTP " + r.status + ")");
-  const rows = await r.json();
-  if (!rows || rows.length === 0) return [];
-  let list = rows[0].value;
-  if (typeof list === "string") {
+  if (r.ok) {
+    const rows = await r.json();
+    if (rows && rows.length > 0) {
+      const list = rows
+        .filter(function (x) {
+          return !x.del && !x.arch;
+        })
+        .map(function (x) {
+          return {
+            id: String(x.key).replace(/^child:/, ""),
+            name: x.nm || "(이름 없음)",
+            owner: x.ow || "",
+          };
+        });
+      if (list.length > 0) {
+        list.sort(function (a, b) {
+          return a.name.localeCompare(b.name, "ko");
+        });
+        return list;
+      }
+    }
+  }
+
+  // 2) 예전 방식 — 한 덩어리로 저장된 경우
+  const r2 = await authedFetch(
+    base + "&key=eq." + encodeURIComponent(CHILDREN_KEY) + "&select=value"
+  );
+  if (!r2.ok) throw new Error("아동 목록을 읽지 못했습니다 (HTTP " + r2.status + ")");
+  const rows2 = await r2.json();
+  if (!rows2 || rows2.length === 0) return [];
+  let arr = rows2[0].value;
+  if (typeof arr === "string") {
     try {
-      list = JSON.parse(list);
+      arr = JSON.parse(arr);
     } catch (e) {
       throw new Error("아동 목록의 형식을 읽지 못했습니다.");
     }
   }
-  if (!Array.isArray(list)) return [];
-  return list
+  if (!Array.isArray(arr)) return [];
+  return arr
     .filter(function (c) {
       if (!c || !c.id) return false;
       if (c.deletedAt) return false;
@@ -1278,8 +1310,9 @@ function StaffConsole(props) {
     [tab, surveys, links, inquiries]
   );
 
-  function ensureChildren() {
-    if (children !== null || loadingChildren) return;
+  function ensureChildren(force) {
+    if (loadingChildren) return;
+    if (children !== null && !force) return;
     setLoadingChildren(true);
     setChildErr("");
     loadChildren()
@@ -1726,14 +1759,25 @@ function InquirySheet(props) {
                 </button>
               ) : (
                 <div>
-                  <input
-                    className="inp"
-                    placeholder="아동 이름으로 찾기"
-                    value={childQuery}
-                    onChange={function (e) {
-                      setChildQuery(e.target.value);
-                    }}
-                  />
+                  <div className="reload-row">
+                    <input
+                      className="inp"
+                      placeholder="아동 이름으로 찾기"
+                      value={childQuery}
+                      onChange={function (e) {
+                        setChildQuery(e.target.value);
+                      }}
+                    />
+                    <button
+                      className="ghost"
+                      onClick={function () {
+                        props.ensureChildren(true);
+                      }}
+                      disabled={props.loadingChildren}
+                    >
+                      {props.loadingChildren ? "…" : "다시 불러오기"}
+                    </button>
+                  </div>
                   <div className="chips mt">
                     {filtered.map(function (c) {
                       return (
@@ -1886,14 +1930,25 @@ function MakeTab(props) {
         </div>
       ) : (
         <div>
-          <input
-            className="inp"
-            placeholder="아동 이름 또는 담당 선생님으로 찾기"
-            value={query}
-            onChange={function (e) {
-              setQuery(e.target.value);
-            }}
-          />
+          <div className="reload-row">
+            <input
+              className="inp"
+              placeholder="아동 이름 또는 담당 선생님으로 찾기"
+              value={query}
+              onChange={function (e) {
+                setQuery(e.target.value);
+              }}
+            />
+            <button
+              className="ghost"
+              onClick={function () {
+                props.ensureChildren(true);
+              }}
+              disabled={props.loadingChildren}
+            >
+              {props.loadingChildren ? "…" : "다시 불러오기"}
+            </button>
+          </div>
           <ul className="rows">
             {filtered.map(function (c) {
               return (
@@ -2220,6 +2275,9 @@ const CSS = `
 .inp:focus { outline: none; border-color: var(--pk); box-shadow: 0 0 0 3px var(--pkl); }
 .ta { resize: vertical; line-height: 1.7; }
 .dpick { display: flex; gap: 8px; }
+.reload-row { display: flex; gap: 8px; align-items: flex-end; }
+.reload-row .inp { flex: 1; min-width: 0; }
+.reload-row .ghost { flex: none; white-space: nowrap; margin-bottom: 1px; }
 .sel { flex: 1; min-width: 0; appearance: none; -webkit-appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--pkd) 50%),
     linear-gradient(135deg, var(--pkd) 50%, transparent 50%);
