@@ -393,6 +393,17 @@ const REIN_Q = [
   { id: "extra", n: 19, label: "더 알려주고 싶은 것이 있으면 자유롭게 적어주세요", type: "text" },
 ];
 
+/* 상담 전 사전 설문 — 10번(걱정되는 부분) 선택에 따라 뒤 문항이 갈린다.
+   showIf 가 붙은 문항·구역은 그 값을 고른 사람에게만 보인다. */
+const CONCERNS = [
+  "말·의사소통",
+  "행동",
+  "또래·사회성",
+  "학습·학교 준비",
+  "일상생활",
+  "아직 잘 모르겠음",
+];
+
 const INQ_Q = [
   { sec: "아동 정보" },
   { id: "childName", n: 1, label: "아동 이름", type: "line", required: true },
@@ -412,34 +423,105 @@ const INQ_Q = [
   { id: "school", n: 8, label: "교육기관", type: "single",
     options: ["미등원", "어린이집", "유치원", "초등학교", "중학교 이상"] },
   { id: "grade", n: 9, label: "학년·반", type: "line" },
-  { id: "classType", n: 10, label: "통합·특수 여부", type: "single",
-    options: ["일반학급", "통합학급", "특수학급", "특수학교", "해당 없음"] },
-  { id: "speech", n: 11, label: "말로 표현하는 수준", type: "single", required: true,
-    options: ["아직 말이 나오지 않음", "단어 하나", "두세 단어 조합", "문장으로 말함", "잘 모르겠음"] },
-  { id: "behavior", n: 12, label: "걱정되는 행동이 있습니까?", type: "multi",
-    options: ["자해", "공격", "반복적인 행동·말", "물건 던지기·부수기", "없음"], etc: true },
-  { id: "toilet", n: 13, label: "배변", type: "single",
-    options: ["기저귀", "어른이 시간 맞춰 데려감", "스스로 표현함", "스스로 처리함"] },
+
+  { sec: "어떤 부분이 궁금하신가요",
+    note: "아이를 판단하기 위한 것이 아니라, 상담 때 무엇부터 이야기 나눌지 정하기 위한 것입니다. 고르신 것에 맞는 질문만 아래에 나옵니다." },
+  { id: "concern", n: 10, label: "요즘 가장 도움이 필요한 부분", type: "multi",
+    options: CONCERNS, required: true },
+
+  /* ── 행동 ────────────────────────────────────────────── */
+  { sec: "행동에 대해", showIf: { id: "concern", anyOf: ["행동"] } },
+  { id: "bWhen", n: "B1", label: "어떤 상황에서 주로 나타나나요?", type: "multi",
+    options: ["하고 싶은 걸 못 하게 할 때", "하기 싫은 걸 시킬 때", "원하는 게 있을 때",
+      "갑자기 계획이 바뀔 때", "사람이 많거나 시끄러울 때", "특별한 상황 없이", "잘 모르겠음"],
+    etc: true, showIf: { id: "concern", anyOf: ["행동"] } },
+  { id: "bHow", n: "B2", label: "어떤 모습으로 나타나나요?", type: "multi",
+    options: ["울거나 소리 지름", "바닥에 눕거나 버팀", "물건을 던지거나 부숨",
+      "사람을 때리거나 밈", "자기 몸을 때리거나 부딪침", "자리를 벗어남", "말로 거칠게 표현함"],
+    etc: true, showIf: { id: "concern", anyOf: ["행동"] } },
+  { id: "bFreq", n: "B3", label: "얼마나 자주 있나요?", type: "single",
+    options: ["하루에 여러 번", "하루 한 번쯤", "일주일에 몇 번", "가끔"],
+    showIf: { id: "concern", anyOf: ["행동"] } },
+  { id: "bResponse", n: "B4", label: "그럴 때 보호자께서는 주로 어떻게 하시나요?", type: "text",
+    note: "예: 안아서 진정시킨다 · 원하는 걸 들어준다 · 잠시 두고 본다",
+    showIf: { id: "concern", anyOf: ["행동"] } },
+  { id: "bInjury", n: "B5", label: "다치거나 다치게 한 적이 있나요?", type: "yesno",
+    detailLabel: "어떤 상황이었는지 간단히 적어주세요",
+    showIf: { id: "concern", anyOf: ["행동"] } },
+  { id: "bGood", n: "B6", label: "반대로, 잘 지내는 상황도 알려주세요", type: "text",
+    note: "예: 혼자 놀 때는 괜찮다 · 아빠랑 있을 때는 덜하다",
+    showIf: { id: "concern", anyOf: ["행동"] } },
+
+  /* ── 말·의사소통 ──────────────────────────────────────── */
+  { sec: "말·의사소통에 대해", showIf: { id: "concern", anyOf: ["말·의사소통"] } },
+  { id: "lExpress", n: "L1", label: "지금 어떻게 표현하나요?", type: "single",
+    options: ["아직 말이 나오지 않음", "단어 하나", "두세 단어 조합", "문장으로 말함"],
+    showIf: { id: "concern", anyOf: ["말·의사소통"] } },
+  { id: "lUnderstand", n: "L2", label: "어른 말은 얼마나 이해하나요?", type: "single",
+    options: ["이름 부르면 반응", "간단한 지시를 따름", "두 단계 지시를 따름", "잘 모르겠음"],
+    showIf: { id: "concern", anyOf: ["말·의사소통"] } },
+  { id: "lAac", n: "L3", label: "말 외에 쓰는 방법이 있나요?", type: "multi",
+    options: ["손짓·가리키기", "그림카드", "기기", "없음"], etc: true,
+    showIf: { id: "concern", anyOf: ["말·의사소통"] } },
+
+  /* ── 또래·사회성 ──────────────────────────────────────── */
+  { sec: "또래·사회성에 대해", showIf: { id: "concern", anyOf: ["또래·사회성"] } },
+  { id: "sPeer", n: "S1", label: "또래와 있을 때 어떤가요?", type: "single",
+    options: ["관심 없어 보임", "관심은 있는데 다가가지 못함", "다가가지만 방식이 서툼", "잘 어울림"],
+    showIf: { id: "concern", anyOf: ["또래·사회성"] } },
+  { id: "sEye", n: "S2", label: "눈맞춤은 어떤가요?", type: "single",
+    options: ["잘 안 함", "가끔 함", "자주 함"],
+    showIf: { id: "concern", anyOf: ["또래·사회성"] } },
+  { id: "sHard", n: "S3", label: "특별히 어려워하는 상황", type: "text",
+    showIf: { id: "concern", anyOf: ["또래·사회성"] } },
+
+  /* ── 학습·학교 준비 ───────────────────────────────────── */
+  { sec: "학습·학교 준비에 대해", showIf: { id: "concern", anyOf: ["학습·학교 준비"] } },
+  { id: "aSit", n: "A1", label: "앉아서 하는 활동을 얼마나 유지하나요?", type: "single",
+    options: ["1~2분", "5분쯤", "10분 이상"],
+    showIf: { id: "concern", anyOf: ["학습·학교 준비"] } },
+  { id: "aHard", n: "A2", label: "어려워하는 부분", type: "multi",
+    options: ["지시 따르기", "차례 기다리기", "집중 유지", "글자·숫자", "손 쓰는 활동"],
+    etc: true, showIf: { id: "concern", anyOf: ["학습·학교 준비"] } },
+  { id: "aFeedback", n: "A3", label: "학교·유치원에서 들은 이야기가 있나요?", type: "text",
+    showIf: { id: "concern", anyOf: ["학습·학교 준비"] } },
+
+  /* ── 일상생활 ─────────────────────────────────────────── */
+  { sec: "일상생활에 대해", showIf: { id: "concern", anyOf: ["일상생활"] } },
+  { id: "dToilet", n: "D1", label: "배변", type: "single",
+    options: ["아직 기저귀를 사용해요", "어른이 시간 맞춰 데려가요", "스스로 표현해요", "스스로 해결해요"],
+    showIf: { id: "concern", anyOf: ["일상생활"] } },
+  { id: "dMeal", n: "D2", label: "식사", type: "single",
+    options: ["도움이 많이 필요", "조금 도와주면 됨", "스스로 함"],
+    showIf: { id: "concern", anyOf: ["일상생활"] } },
+  { id: "dHard", n: "D3", label: "특별히 힘든 부분", type: "text",
+    showIf: { id: "concern", anyOf: ["일상생활"] } },
 
   { sec: "희망 사항" },
-  { id: "program", n: 14, label: "관심 있는 프로그램", type: "multi", required: true,
-    options: ["ABA 개별수업", "SCERTS 짝수업", "ABA 조기교실", "언어치료", "학교준비반", "아직 모르겠음"] },
-  { id: "days", n: 15, label: "희망 요일", type: "multi",
+  { id: "days", n: 11, label: "희망 요일", type: "multi",
     options: ["월", "화", "수", "목", "금", "토"] },
-  { id: "times", n: 16, label: "희망 시간대", type: "multi",
+  { id: "times", n: 12, label: "희망 시간대", type: "multi",
     options: ["오전", "이른 오후", "늦은 오후", "저녁"] },
-  { id: "start", n: 17, label: "언제부터 시작하고 싶으신가요?", type: "single",
+  { id: "start", n: 13, label: "언제부터 시작하고 싶으신가요?", type: "single",
     options: ["바로", "1개월 내", "2~3개월 내", "아직 미정"] },
-
-  { sec: "참고" },
-  { id: "report", n: 18, label: "검사 보고서를 가지고 계십니까?", type: "single",
+  { id: "report", n: 14, label: "검사 보고서를 가지고 계신가요?", type: "single",
     options: ["있음", "없음", "진행 중"], note: "있으시면 상담 때 가져와 주세요." },
-  { id: "prior", n: 19, label: "다른 기관에서 치료받은 경험이 있습니까?", type: "yesno",
-    detailLabel: "어떤 치료를 얼마 동안 받으셨는지 간단히 적어주세요" },
-  { id: "source", n: 20, label: "저희 센터를 어떻게 알게 되셨나요?", type: "single", required: true,
+  { id: "source", n: 15, label: "저희를 어떻게 알게 되셨나요?", type: "single", required: true,
     options: ["홈페이지", "인스타그램", "블로그", "지인 소개", "인쇄물·현수막", "검색"], etc: true },
-  { id: "question", n: 21, label: "궁금하신 점이나 미리 알려주실 내용", type: "text" },
+  { id: "question", n: 16, label: "궁금하신 점", type: "text" },
 ];
+
+/* 분기 판정 — showIf 가 없으면 항상 보인다 */
+function isVisible(q, answers) {
+  const c = q && q.showIf;
+  if (!c) return true;
+  const a = answers && answers[c.id];
+  if (!a) return false;
+  const picked = Array.isArray(a.v) ? a.v : (a.v ? [a.v] : []);
+  return (c.anyOf || []).some(function (x) {
+    return picked.indexOf(x) !== -1;
+  });
+}
 
 function fieldsOf(qs) {
   return qs.filter(function (q) {
@@ -511,6 +593,7 @@ function validateAnswers(qs, answers) {
   const e = {};
   fieldsOf(qs).forEach(function (q) {
     if (!q.required) return;
+    if (!isVisible(q, answers)) return;   // 안 보이는 문항은 검사하지 않는다
     const a = answers[q.id];
     if (!a) return;
     if (q.type === "single" && !a.v && !a.etc) e[q.id] = "선택해 주세요.";
@@ -676,7 +759,9 @@ function QuestionList(props) {
 
   return (
     <div>
-      {props.questions.map(function (q, idx) {
+      {props.questions.filter(function (q) {
+        return isVisible(q, answers);
+      }).map(function (q, idx) {
         if (q.sec) {
           return (
             <div className="sec" key={"s" + idx}>
@@ -1580,6 +1665,7 @@ function InquiryTab(props) {
 
       {open ? (
         <InquirySheet
+          key={open.id}
           row={open}
           onClose={function () {
             setOpen(null);
@@ -1606,6 +1692,50 @@ function InquirySheet(props) {
   const [status, setStatus] = useState(row.status);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  /* 자동 저장 — 타이핑을 멈추면 알아서 저장한다. 저장 버튼이 따로 없다. */
+  const [saveState, setSaveState] = useState("");   // "" | saving | saved | error
+  const saveTimer = useRef(null);
+  const latest = useRef({ memo: row.memo || "", status: row.status });
+
+  useEffect(function () {
+    return function () {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, []);
+
+  function pushSave(next) {
+    latest.current = Object.assign({}, latest.current, next || {});
+    setSaveState("saving");
+    patchInquiry(row.id, {
+      memo: latest.current.memo,
+      status: latest.current.status,
+    })
+      .then(function (updated) {
+        setSaveState("saved");
+        if (updated) props.onSaved(updated);
+      })
+      .catch(function (e) {
+        setSaveState("error");
+        setMsg(e.message);
+      });
+  }
+
+  function onMemoChange(v) {
+    setMemo(v);
+    latest.current.memo = v;
+    setSaveState("saving");
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(function () {
+      pushSave({ memo: v });
+    }, 800);
+  }
+
+  function onStatusPick(v) {
+    setStatus(v);
+    latest.current.status = v;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    pushSave({ status: v });
+  }
   const [childQuery, setChildQuery] = useState("");
   const [pickedChild, setPickedChild] = useState(null);
   const [pickedStaff, setPickedStaff] = useState("");
@@ -1622,21 +1752,6 @@ function InquirySheet(props) {
     },
     [props.childList, childQuery]
   );
-
-  function save() {
-    setBusy(true);
-    setMsg("");
-    patchInquiry(row.id, { memo: memo, status: status })
-      .then(function (updated) {
-        setBusy(false);
-        setMsg("저장했습니다.");
-        if (updated) props.onSaved(updated);
-      })
-      .catch(function (e) {
-        setBusy(false);
-        setMsg(e.message);
-      });
-  }
 
   function connectAndMakeLink() {
     if (!pickedChild) {
@@ -1669,7 +1784,7 @@ function InquirySheet(props) {
   return (
     <div className="modal" onClick={props.onClose}>
       <div
-        className="sheet"
+        className="sheet sheet-wide"
         onClick={function (e) {
           e.stopPropagation();
         }}
@@ -1696,8 +1811,8 @@ function InquirySheet(props) {
           </div>
         </div>
 
-        <div className="admin-box">
-          <p className="pub-label">진행 상태</p>
+        <div className="admin-box status-row">
+          <span className="pub-label inline">진행 상태</span>
           <div className="chips">
             {STATUSES.map(function (s) {
               return (
@@ -1705,7 +1820,7 @@ function InquirySheet(props) {
                   key={s}
                   on={status === s}
                   onClick={function () {
-                    setStatus(s);
+                    onStatusPick(s);
                   }}
                 >
                   {s}
@@ -1713,18 +1828,42 @@ function InquirySheet(props) {
               );
             })}
           </div>
-          <textarea
-            className="inp ta"
-            rows={3}
-            placeholder="상담 메모"
-            value={memo}
-            onChange={function (e) {
-              setMemo(e.target.value);
-            }}
-          />
-          <button className="submit sm mt" onClick={save} disabled={busy}>
-            {busy ? "저장 중…" : "상태·메모 저장"}
-          </button>
+          <span className={"savetag savetag-" + (saveState || "idle")}>
+            {saveState === "saving"
+              ? "저장 중…"
+              : saveState === "saved"
+              ? "✓ 저장됨"
+              : saveState === "error"
+              ? "저장 실패"
+              : "자동 저장"}
+          </span>
+        </div>
+
+        <div className="split">
+          <div className="split-main">
+            <p className="pub-label">학부모가 보내온 답변</p>
+            <Detail questions={INQ_Q} answers={row.answers} />
+          </div>
+          <aside className="split-side">
+            <p className="pub-label">상담 메모</p>
+            <textarea
+              className="inp ta memo-pad"
+              placeholder="상담하면서 바로 적으세요. 타이핑을 멈추면 자동으로 저장됩니다."
+              value={memo}
+              onChange={function (e) {
+                onMemoChange(e.target.value);
+              }}
+            />
+            <p className="pool-hint">
+              {saveState === "saving"
+                ? "저장 중…"
+                : saveState === "saved"
+                ? "✓ 저장되었습니다"
+                : saveState === "error"
+                ? "저장하지 못했습니다. 인터넷 연결을 확인해 주세요."
+                : "적으시면 자동으로 저장됩니다."}
+            </p>
+          </aside>
         </div>
 
         <div className="admin-box">
@@ -1828,7 +1967,6 @@ function InquirySheet(props) {
           {msg ? <p className="pool-hint">{msg}</p> : null}
         </div>
 
-        <Detail questions={INQ_Q} answers={row.answers} />
       </div>
     </div>
   );
@@ -2120,7 +2258,9 @@ function Detail(props) {
   const answers = props.answers || {};
   return (
     <dl className="detail">
-      {props.questions.map(function (q, i) {
+      {props.questions.filter(function (q) {
+        return isVisible(q, answers);
+      }).map(function (q, i) {
         if (q.sec)
           return (
             <h3 className="detail-sec" key={"ds" + i}>
@@ -2334,6 +2474,24 @@ const CSS = `
 .made-btns { display: flex; gap: 8px; align-items: center; }
 .made-hint { margin: 12px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
 
+.status-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pub-label.inline { margin: 0; white-space: nowrap; }
+.savetag { margin-left: auto; font-size: 11px; padding: 3px 9px; border-radius: 8px;
+  background: #F2F2F0; color: #8A857D; white-space: nowrap; }
+.savetag-saving { background: var(--pkl); color: var(--pkd); }
+.savetag-saved { background: #EAF3DE; color: #4A7316; }
+.savetag-error { background: #FDECEC; color: #A83232; }
+
+.split { display: flex; gap: 14px; align-items: flex-start; margin-top: 12px; }
+.split-main { flex: 1 1 0; min-width: 0; }
+.split-side { flex: 0 0 320px; position: sticky; top: 4px; }
+.memo-pad { min-height: 340px; line-height: 1.8; }
+@media (max-width: 820px) {
+  .split { flex-direction: column; }
+  .split-side { position: static; flex: 1 1 auto; width: 100%; }
+  .memo-pad { min-height: 200px; }
+}
+
 .admin-box { background: #FFF9FA; border: 1px solid var(--line); border-radius: 12px;
   padding: 14px 14px; margin: 14px 0; }
 
@@ -2341,6 +2499,7 @@ const CSS = `
   display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
 .sheet { width: 100%; max-width: 620px; max-height: 92vh; overflow-y: auto;
   background: #fff; border-radius: 18px 18px 0 0; padding: 20px 18px 40px; }
+.sheet-wide { max-width: 1040px; }
 .sheet-head { display: flex; justify-content: space-between; align-items: flex-start;
   gap: 12px; border-bottom: 2px solid var(--pkl); padding-bottom: 14px; margin-bottom: 4px; }
 .sheet-head h2 { font-family: 'Jua', sans-serif; font-weight: 400; font-size: 18px; margin: 0; }
@@ -2356,7 +2515,14 @@ const CSS = `
 
 @media print {
   .app { background: #fff; }
-  .hero, .tabs, .rows, .sheet-btns, .submit, .ghost, .admin-box, .pub, .filter { display: none !important; }
+  .hero, .tabs, .rows, .sheet-btns, .submit, .ghost, .admin-box, .pub, .filter,
+  .savetag { display: none !important; }
+  /* 인쇄는 종이 폭이 좁으니 2단을 위아래로 편다 — 답변 다음에 상담 메모 */
+  .split { display: block !important; }
+  .split-main, .split-side { width: 100% !important; position: static !important; }
+  .split-side { margin-top: 10pt; break-inside: avoid; }
+  .memo-pad { min-height: 0 !important; border: 1px solid var(--line) !important;
+    background: #fff !important; height: auto !important; }
   .modal { position: static; background: none; display: block; }
   .sheet { max-height: none; overflow: visible; border-radius: 0; padding: 0; }
 }
