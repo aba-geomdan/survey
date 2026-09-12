@@ -31,11 +31,38 @@ const PK = "#F5A0B1";
 const PKD = "#D4728A";
 const PKL = "#FFF0F3";
 
-const STATUSES = ["상담예정", "등록", "미등록"];
+const STATUSES = ["상담예정", "등록", "대기", "미등록"];
 function badgeClass(s) {
   if (s === "상담예정") return "badge-new";
+  if (s === "대기") return "badge-wait";
   if (s === "미등록") return "badge-off";
   return "";
+}
+
+/* 대기 목록에 바로 보여줄 희망 조건 — 자리가 났을 때 누구에게 연락할지 한눈에 */
+function wishText(answers) {
+  const a = answers || {};
+  const days = (a.days && a.days.v) || [];
+  const times = (a.times && a.times.v) || [];
+  const parts = [];
+  if (days.length > 0) parts.push(days.join("·"));
+  if (times.length > 0) parts.push(times.join("·"));
+  return parts.join(" / ");
+}
+
+/* 며칠째 기다리는지 */
+function waitingDays(iso) {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (isNaN(t)) return null;
+  return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+}
+function waitingText(iso) {
+  const d = waitingDays(iso);
+  if (d === null) return "";
+  if (d < 7) return d + "일째";
+  if (d < 30) return Math.floor(d / 7) + "주째";
+  return Math.floor(d / 30) + "개월째";
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -312,6 +339,38 @@ async function loadLinks() {
   const r = await authedFetch(url);
   if (!r.ok) throw new Error("링크 목록을 읽지 못했습니다 (HTTP " + r.status + ")");
   return await r.json();
+}
+
+/* 등록 한 번에 — 통합본에 아동 생성 + 문의 연결 + 담당 배정 + 강화제 링크 */
+async function registerChild(inquiryId, name, birth, ownerName, assignedTo, force) {
+  const rows = await rpc(
+    "rein_register_child",
+    {
+      p_inquiry_id: inquiryId || null,
+      p_name: name,
+      p_birth: birth || "",
+      p_owner_name: ownerName || "",
+      p_assigned_to: assignedTo || null,
+      p_force: !!force,
+    },
+    true
+  );
+  if (!rows || rows.length === 0) throw new Error("등록하지 못했습니다.");
+  return rows[0];
+}
+
+/* 이미 통합본에 있는 아동과 잇기 (되돌리기용) */
+async function linkExistingChild(inquiryId, childId, childName, assignedTo) {
+  return await rpc(
+    "rein_link_existing",
+    {
+      p_inquiry_id: inquiryId || null,
+      p_child_id: childId,
+      p_child_name: childName || "",
+      p_assigned_to: assignedTo || null,
+    },
+    true
+  );
 }
 
 async function loadInquiries() {
@@ -1439,7 +1498,10 @@ function StaffConsole(props) {
         ["surveys", "받은 응답"],
         ["links", "보낸 링크"],
       ]
-    : [["surveys", "받은 응답"]];
+    : [
+        ["surveys", "강화제 설문"],
+        ["inq", "상담 신청서"],
+      ];
 
   return (
     <div className="wrap">
@@ -1479,6 +1541,7 @@ function StaffConsole(props) {
 
       {tab === "inq" ? (
         <InquiryTab
+          admin={admin}
           inquiries={inquiries}
           setInquiries={setInquiries}
           staff={staff}
@@ -1576,10 +1639,18 @@ function InquiryTab(props) {
   const shown = useMemo(
     function () {
       if (!list) return [];
-      if (filter === "전체") return list;
-      return list.filter(function (x) {
-        return x.status === filter;
-      });
+      const base = filter === "전체"
+        ? list
+        : list.filter(function (x) {
+            return x.status === filter;
+          });
+      // 대기 목록은 오래 기다린 순으로 — 자리가 나면 위에서부터 연락하시면 됩니다
+      if (filter === "대기") {
+        return base.slice().sort(function (a, b) {
+          return String(a.created_at || "").localeCompare(String(b.created_at || ""));
+        });
+      }
+      return base;
     },
     [list, filter]
   );
@@ -1596,6 +1667,7 @@ function InquiryTab(props) {
 
   return (
     <div>
+      {props.admin ? (
       <div className="pub">
         <p className="pub-label">상담 전 사전 설문 주소</p>
         <p className="made-url">{props.publicUrl}</p>
@@ -1612,6 +1684,7 @@ function InquiryTab(props) {
           만료되지 않습니다.
         </p>
       </div>
+      ) : null}
 
       <div className="chips filter">
         {["전체"].concat(STATUSES).map(function (s) {
@@ -1629,10 +1702,18 @@ function InquiryTab(props) {
         })}
       </div>
 
+      {filter === "대기" && shown.length > 0 ? (
+        <p className="wait-note">
+          오래 기다린 순입니다. 자리가 나면 희망 요일·시간이 맞는 아동에게 연락하세요.
+        </p>
+      ) : null}
+
       {list === null ? (
         <p className="notice">불러오는 중입니다…</p>
       ) : shown.length === 0 ? (
-        <p className="notice">해당하는 문의가 없습니다.</p>
+        <p className="notice">
+          {props.admin ? "해당하는 문의가 없습니다." : "배정된 상담 신청서가 없습니다."}
+        </p>
       ) : (
         <ul className="rows">
           {shown.map(function (x) {
@@ -1640,6 +1721,12 @@ function InquiryTab(props) {
               <li className="row" key={x.id}>
                 <span>
                   <b>{x.child_name || "(이름 없음)"}</b>
+                  {x.status === "대기" ? (
+                    <em className="row-sub wish">
+                      {wishText(x.answers) || "희망 요일·시간 미기재"}
+                      <span className="wait-days">{waitingText(x.created_at)} 대기</span>
+                    </em>
+                  ) : null}
                   <em className="row-sub">
                     {new Date(x.created_at).toLocaleDateString("ko-KR")} · {x.phone}
                     {x.child_id ? " · 아동 연결됨" : ""}
@@ -1666,6 +1753,7 @@ function InquiryTab(props) {
       {open ? (
         <InquirySheet
           key={open.id}
+          admin={props.admin}
           row={open}
           onClose={function () {
             setOpen(null);
@@ -1740,6 +1828,13 @@ function InquirySheet(props) {
   const [pickedChild, setPickedChild] = useState(null);
   const [pickedStaff, setPickedStaff] = useState("");
   const [madeUrl, setMadeUrl] = useState("");
+  /* 등록 — 상담 신청서에 적힌 이름·생년월일을 그대로 쓰되 고칠 수 있게 둔다 */
+  const [regName, setRegName] = useState(row.child_name || "");
+  const [regBirth, setRegBirth] = useState(
+    (row.answers && row.answers.birth && row.answers.birth.v) || ""
+  );
+  const [dupWarn, setDupWarn] = useState("");   // 같은 이름이 있을 때 한 번 더 확인
+  const [useExisting, setUseExisting] = useState(false);
 
   const filtered = useMemo(
     function () {
@@ -1753,27 +1848,80 @@ function InquirySheet(props) {
     [props.childList, childQuery]
   );
 
-  function connectAndMakeLink() {
+  /* 등록 버튼 — 통합본에 아동을 만들고, 문의를 잇고, 링크까지 한 번에 */
+  function doRegister(force) {
+    const nm = (regName || "").trim();
+    if (!nm) {
+      setMsg("아동 이름을 확인해 주세요.");
+      return;
+    }
+    if (!pickedStaff) {
+      setMsg("담당 선생님을 골라 주세요.");
+      return;
+    }
+    const teacher = (props.staff || []).find(function (x) {
+      return x.id === pickedStaff;
+    });
+    setBusy(true);
+    setMsg("");
+    registerChild(row.id, nm, regBirth, teacher ? teacher.name : "", pickedStaff, force)
+      .then(function (res) {
+        setMadeUrl(props.linkUrl(res.token));
+        setStatus("등록");
+        setDupWarn("");
+        setBusy(false);
+        setMsg("등록했습니다. 통합본에 아동이 만들어졌습니다. 아래 링크를 학부모께 보내주세요.");
+        props.onSaved(
+          Object.assign({}, row, {
+            child_id: res.child_id,
+            status: "등록",
+            assigned_to: pickedStaff,
+          })
+        );
+        props.onLinkMade();
+      })
+      .catch(function (e) {
+        setBusy(false);
+        const t = e && e.message ? e.message : "";
+        if (t.indexOf("한 번 더") !== -1) {
+          const m = t.match(/이미 (\d+) ?명/);
+          setDupWarn(
+            "통합본에 같은 이름의 아동이 " + (m ? m[1] : "여러") +
+            "명 있습니다. 다른 아동이 맞으면 아래 버튼을 한 번 더 눌러 주세요."
+          );
+          setMsg("");
+        } else {
+          setMsg(t || "등록하지 못했습니다.");
+        }
+      });
+  }
+
+  /* 되돌리기용 — 이미 통합본에 있는 아동과 잇기 */
+  function connectExisting() {
     if (!pickedChild) {
       setMsg("아동을 먼저 선택해 주세요.");
       return;
     }
+    if (!pickedStaff) {
+      setMsg("담당 선생님을 골라 주세요.");
+      return;
+    }
     setBusy(true);
     setMsg("");
-    createLink(pickedChild, pickedStaff || null)
-      .then(function (link) {
-        return patchInquiry(row.id, {
-          child_id: pickedChild.id,
-          status: "등록",
-          memo: memo,
-        }).then(function (updated) {
-          setMadeUrl(props.linkUrl(link.token));
-          setStatus("등록");
-          setBusy(false);
-          setMsg("연결했습니다. 아래 링크를 학부모께 보내주세요.");
-          if (updated) props.onSaved(updated);
-          props.onLinkMade();
-        });
+    linkExistingChild(row.id, pickedChild.id, pickedChild.name, pickedStaff)
+      .then(function (token) {
+        setMadeUrl(props.linkUrl(token));
+        setStatus("등록");
+        setBusy(false);
+        setMsg("연결했습니다. 아래 링크를 학부모께 보내주세요.");
+        props.onSaved(
+          Object.assign({}, row, {
+            child_id: pickedChild.id,
+            status: "등록",
+            assigned_to: pickedStaff,
+          })
+        );
+        props.onLinkMade();
       })
       .catch(function (e) {
         setBusy(false);
@@ -1820,7 +1968,7 @@ function InquirySheet(props) {
                   key={s}
                   on={status === s}
                   onClick={function () {
-                    onStatusPick(s);
+                    if (props.admin) onStatusPick(s);
                   }}
                 >
                   {s}
@@ -1828,8 +1976,10 @@ function InquirySheet(props) {
               );
             })}
           </div>
-          <span className={"savetag savetag-" + (saveState || "idle")}>
-            {saveState === "saving"
+          <span className={"savetag savetag-" + (props.admin ? (saveState || "idle") : "idle")}>
+            {!props.admin
+              ? "보기 전용"
+              : saveState === "saving"
               ? "저장 중…"
               : saveState === "saved"
               ? "✓ 저장됨"
@@ -1848,14 +1998,21 @@ function InquirySheet(props) {
             <p className="pub-label">상담 메모</p>
             <textarea
               className="inp ta memo-pad"
-              placeholder="상담하면서 바로 적으세요. 타이핑을 멈추면 자동으로 저장됩니다."
+              readOnly={!props.admin}
+              placeholder={
+                props.admin
+                  ? "상담하면서 바로 적으세요. 타이핑을 멈추면 자동으로 저장됩니다."
+                  : "원장님이 남긴 상담 메모가 여기 표시됩니다."
+              }
               value={memo}
               onChange={function (e) {
-                onMemoChange(e.target.value);
+                if (props.admin) onMemoChange(e.target.value);
               }}
             />
             <p className="pool-hint">
-              {saveState === "saving"
+              {!props.admin
+                ? "원장님이 작성하는 칸입니다."
+                : saveState === "saving"
                 ? "저장 중…"
                 : saveState === "saved"
                 ? "✓ 저장되었습니다"
@@ -1866,89 +2023,167 @@ function InquirySheet(props) {
           </aside>
         </div>
 
+        {props.admin ? (
         <div className="admin-box">
-          <p className="pub-label">등록 확정 · 아동 연결</p>
+          <p className="pub-label">등록 확정</p>
           {row.child_id ? (
             <p className="pool-hint">
-              이미 연결된 문의입니다 (아동 id {row.child_id}). 새 링크가 필요하면
+              이미 등록된 문의입니다 (아동 id {row.child_id}). 새 링크가 필요하면
               [링크 만들기] 탭에서 만드세요.
             </p>
           ) : (
             <div>
               <p className="pool-hint">
-                통합본에서 아동을 먼저 만드신 뒤, 여기서 그 아동을 골라 연결하세요.
+                버튼 하나로 통합본에 아동이 만들어지고, 담당 선생님 배정과 강화제 설문
+                링크까지 함께 처리됩니다. 수업 시작일·회기 시간·목표는 담당 선생님이
+                통합본에서 채우시면 됩니다.
               </p>
-              {props.childList === null ? (
-                <button
-                  className="submit sm"
-                  onClick={props.ensureChildren}
-                  disabled={props.loadingChildren}
-                >
-                  {props.loadingChildren ? "불러오는 중…" : "아동 목록 불러오기"}
-                </button>
-              ) : (
-                <div>
-                  <div className="reload-row">
-                    <input
-                      className="inp"
-                      placeholder="아동 이름으로 찾기"
-                      value={childQuery}
-                      onChange={function (e) {
-                        setChildQuery(e.target.value);
-                      }}
-                    />
-                    <button
-                      className="ghost"
+
+              <div className="reg-row mt">
+                <div className="reg-col">
+                  <span className="reg-lab">아동 이름</span>
+                  <input
+                    className="inp"
+                    value={regName}
+                    onChange={function (e) {
+                      setRegName(e.target.value);
+                      setDupWarn("");
+                    }}
+                  />
+                </div>
+                <div className="reg-col">
+                  <span className="reg-lab">생년월일</span>
+                  <input
+                    className="inp"
+                    type="date"
+                    value={regBirth}
+                    onChange={function (e) {
+                      setRegBirth(e.target.value);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <p className="pub-label mt">담당 선생님</p>
+              <div className="chips">
+                {props.staff.map(function (s) {
+                  return (
+                    <Chip
+                      key={s.id}
+                      on={pickedStaff === s.id}
                       onClick={function () {
-                        props.ensureChildren(true);
+                        setPickedStaff(pickedStaff === s.id ? "" : s.id);
+                        setMsg("");
+                      }}
+                    >
+                      {s.name}
+                    </Chip>
+                  );
+                })}
+              </div>
+
+              {dupWarn ? <p className="dup-warn">{dupWarn}</p> : null}
+
+              {!useExisting ? (
+                <div>
+                  <button
+                    className="submit sm mt"
+                    onClick={function () {
+                      doRegister(!!dupWarn);
+                    }}
+                    disabled={busy}
+                  >
+                    {busy
+                      ? "처리 중…"
+                      : dupWarn
+                      ? "그래도 새 아동으로 등록하기"
+                      : "등록하고 강화제 설문 링크 만들기"}
+                  </button>
+                  <button
+                    className="linkish"
+                    onClick={function () {
+                      setUseExisting(true);
+                      setDupWarn("");
+                      setMsg("");
+                      props.ensureChildren();
+                    }}
+                  >
+                    이미 통합본에 있는 아동과 잇기
+                  </button>
+                </div>
+              ) : (
+                <div className="mt">
+                  <p className="pool-hint">
+                    이미 통합본에 있는 아동을 고르세요. 새 아동은 만들어지지 않습니다.
+                  </p>
+                  {props.childList === null ? (
+                    <button
+                      className="submit sm"
+                      onClick={function () {
+                        props.ensureChildren();
                       }}
                       disabled={props.loadingChildren}
                     >
-                      {props.loadingChildren ? "…" : "다시 불러오기"}
+                      {props.loadingChildren ? "불러오는 중…" : "아동 목록 불러오기"}
                     </button>
-                  </div>
-                  <div className="chips mt">
-                    {filtered.map(function (c) {
-                      return (
-                        <Chip
-                          key={c.id}
-                          on={pickedChild && pickedChild.id === c.id}
-                          onClick={function () {
-                            setPickedChild(c);
+                  ) : (
+                    <div>
+                      <div className="reload-row">
+                        <input
+                          className="inp"
+                          placeholder="아동 이름으로 찾기"
+                          value={childQuery}
+                          onChange={function (e) {
+                            setChildQuery(e.target.value);
                           }}
-                        >
-                          {c.name}
-                          {c.owner ? " (" + c.owner + ")" : ""}
-                        </Chip>
-                      );
-                    })}
-                  </div>
-                  <p className="pub-label mt">담당 선생님</p>
-                  <div className="chips">
-                    {props.staff.map(function (s) {
-                      return (
-                        <Chip
-                          key={s.id}
-                          on={pickedStaff === s.id}
+                        />
+                        <button
+                          className="ghost"
                           onClick={function () {
-                            setPickedStaff(pickedStaff === s.id ? "" : s.id);
+                            props.ensureChildren(true);
                           }}
+                          disabled={props.loadingChildren}
                         >
-                          {s.name}
-                        </Chip>
-                      );
-                    })}
-                  </div>
+                          {props.loadingChildren ? "…" : "다시 불러오기"}
+                        </button>
+                      </div>
+                      <div className="chips mt">
+                        {filtered.map(function (c) {
+                          return (
+                            <Chip
+                              key={c.id}
+                              on={pickedChild && pickedChild.id === c.id}
+                              onClick={function () {
+                                setPickedChild(c);
+                              }}
+                            >
+                              {c.name}
+                              {c.owner ? " (" + c.owner + ")" : ""}
+                            </Chip>
+                          );
+                        })}
+                      </div>
+                      <button
+                        className="submit sm mt"
+                        onClick={connectExisting}
+                        disabled={busy}
+                      >
+                        {busy ? "처리 중…" : "이 아동과 잇고 링크 만들기"}
+                      </button>
+                    </div>
+                  )}
                   <button
-                    className="submit sm mt"
-                    onClick={connectAndMakeLink}
-                    disabled={busy}
+                    className="linkish"
+                    onClick={function () {
+                      setUseExisting(false);
+                      setMsg("");
+                    }}
                   >
-                    {busy ? "처리 중…" : "연결하고 강화제 설문 링크 만들기"}
+                    ← 새 아동으로 등록하기
                   </button>
+                  {props.childErr ? <p className="q-errmsg">{props.childErr}</p> : null}
                 </div>
               )}
-              {props.childErr ? <p className="q-errmsg">{props.childErr}</p> : null}
             </div>
           )}
           {madeUrl ? (
@@ -1966,6 +2201,7 @@ function InquirySheet(props) {
           ) : null}
           {msg ? <p className="pool-hint">{msg}</p> : null}
         </div>
+        ) : null}
 
       </div>
     </div>
@@ -2455,11 +2691,19 @@ const CSS = `
 .row-on { border-color: var(--pk); background: var(--pkl); }
 .row-sub { display: block; font-style: normal; font-size: 13px; color: var(--muted); margin-top: 3px; }
 .row-empty { justify-content: center; color: var(--muted); }
+.row-sub.wish { color: #9A6410; font-weight: 600; margin-top: 4px; }
+.wait-days { margin-left: 8px; padding: 1px 7px; border-radius: 7px;
+  background: #FFF1DC; color: #9A6410; font-size: 11px; font-weight: 600; }
+.wait-note { margin: 10px 0 0; padding: 9px 12px; background: #FFF8EE;
+  border: 1px solid #F0DCB8; border-radius: 8px; font-size: 12px;
+  line-height: 1.6; color: #8A6410; }
+
 .row-right { display: flex; align-items: center; gap: 8px; flex: none; }
 .badge { font-style: normal; font-size: 12px; padding: 3px 8px; border-radius: 7px;
   background: var(--pkl); color: var(--pkd); white-space: nowrap; }
 .badge-new { background: var(--pkd); color: #fff; }
 .badge-off { background: #EFEDEE; color: var(--muted); }
+.badge-wait { background: #FFF1DC; color: #9A6410; }
 
 .pub { background: var(--paper); border: 1px solid var(--pk); border-radius: 14px;
   padding: 16px 15px; margin-top: 16px; }
@@ -2481,6 +2725,17 @@ const CSS = `
 .savetag-saving { background: var(--pkl); color: var(--pkd); }
 .savetag-saved { background: #EAF3DE; color: #4A7316; }
 .savetag-error { background: #FDECEC; color: #A83232; }
+
+.reg-row { display: flex; gap: 10px; }
+.reg-col { flex: 1; min-width: 0; }
+.reg-lab { font-size: 11px; color: var(--muted); }
+.reg-col .inp { margin-top: 4px; }
+.dup-warn { margin: 10px 0 0; padding: 9px 11px; background: #FFF6E6;
+  border: 1px solid #E8B866; border-radius: 8px; font-size: 12px;
+  line-height: 1.6; color: #8A5A10; }
+.linkish { display: block; margin-top: 10px; padding: 0; border: none;
+  background: none; color: var(--muted); font: inherit; font-size: 12px;
+  text-decoration: underline; cursor: pointer; }
 
 .split { display: flex; gap: 14px; align-items: flex-start; margin-top: 12px; }
 .split-main { flex: 1 1 0; min-width: 0; }
