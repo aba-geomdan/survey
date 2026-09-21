@@ -331,16 +331,6 @@ async function assignSurvey(id, userId) {
   if (!r.ok) throw new Error("배정하지 못했습니다 (HTTP " + r.status + ")");
 }
 
-async function loadLinks() {
-  const url =
-    SUPABASE_URL +
-    "/rest/v1/rein_links?select=token,child_id,child_name,owner_name,assigned_to,created_at,expires_at" +
-    "&order=created_at.desc&limit=200";
-  const r = await authedFetch(url);
-  if (!r.ok) throw new Error("링크 목록을 읽지 못했습니다 (HTTP " + r.status + ")");
-  return await r.json();
-}
-
 /* 등록 한 번에 — 통합본에 아동 생성 + 문의 연결 + 담당 배정 + 강화제 링크 */
 async function registerChild(inquiryId, name, birth, ownerName, assignedTo, force) {
   const rows = await rpc(
@@ -1421,7 +1411,8 @@ function LoginBox(props) {
 
 function StaffConsole(props) {
   const admin = props.admin;
-  const [tab, setTab] = useState(admin ? "inq" : "surveys");
+  const [tab, setTab] = useState(admin ? "inq" : "rein");
+  const [showMake, setShowMake] = useState(false);   // 강화제 탭의 [아동에게 링크 보내기] 펼침
 
   const [staff, setStaff] = useState([]);
   const [staffErr, setStaffErr] = useState("");
@@ -1431,7 +1422,6 @@ function StaffConsole(props) {
   const [loadingChildren, setLoadingChildren] = useState(false);
 
   const [surveys, setSurveys] = useState(null);
-  const [links, setLinks] = useState(null);
   const [inquiries, setInquiries] = useState(null);
 
   const [err, setErr] = useState("");
@@ -1465,19 +1455,12 @@ function StaffConsole(props) {
 
   useEffect(
     function () {
-      if (tab === "surveys" && surveys === null) {
+      if (tab === "rein" && surveys === null) {
         loadSurveys()
           .then(setSurveys)
           .catch(function (e) {
             setErr(e.message);
             setSurveys([]);
-          });
-      }
-      if (tab === "links" && links === null) {
-        loadLinks()
-          .then(setLinks)
-          .catch(function () {
-            setLinks([]);
           });
       }
       if (tab === "inq" && inquiries === null) {
@@ -1489,7 +1472,7 @@ function StaffConsole(props) {
           });
       }
     },
-    [tab, surveys, links, inquiries]
+    [tab, surveys, inquiries]
   );
 
   function ensureChildren(force) {
@@ -1539,17 +1522,11 @@ function StaffConsole(props) {
     [staff]
   );
 
-  const tabs = admin
-    ? [
-        ["inq", "문의 관리"],
-        ["make", "링크 만들기"],
-        ["surveys", "받은 응답"],
-        ["links", "보낸 링크"],
-      ]
-    : [
-        ["surveys", "강화제 설문"],
-        ["inq", "상담 신청서"],
-      ];
+  /* 설문 두 개 = 탭 두 개. 원장·선생님 화면이 같은 이름을 쓴다. */
+  const tabs = [
+    ["inq", "상담 신청서"],
+    ["rein", "강화제 설문"],
+  ];
 
   return (
     <div className="wrap">
@@ -1605,78 +1582,67 @@ function StaffConsole(props) {
           publicUrl={publicFormUrl()}
           copy={copy}
           copied={copied}
-          onLinkMade={function () {
-            setLinks(null);
-          }}
+          onLinkMade={function () {}}
         />
       ) : null}
 
-      {tab === "make" ? (
-        <MakeTab
-          childList={children}
-          ensureChildren={ensureChildren}
-          childErr={childErr}
-          loadingChildren={loadingChildren}
-          staff={staff}
-          staffErr={staffErr}
-          staffBusy={staffBusy}
-          refetchStaff={fetchStaff}
-          linkUrl={linkUrl}
-          copy={copy}
-          copied={copied}
-          onMade={function () {
-            setLinks(null);
-          }}
-        />
-      ) : null}
-
-      {tab === "surveys" ? (
-        <SurveyTab
-          surveys={surveys}
-          admin={admin}
-          staff={staff}
-          staffName={staffName}
-          onAssigned={function () {
-            setSurveys(null);
-          }}
-        />
-      ) : null}
-
-      {tab === "links" ? (
+      {tab === "rein" ? (
         <div>
-          {links === null ? (
-            <p className="notice">불러오는 중입니다…</p>
-          ) : links.length === 0 ? (
-            <p className="notice">만든 링크가 없습니다.</p>
-          ) : (
-            <ul className="rows">
-              {links.map(function (l) {
-                const dead = new Date(l.expires_at) <= new Date();
-                return (
-                  <li className="row" key={l.token}>
-                    <span>
-                      <b>{l.child_name}</b>
-                      <em className="row-sub">
-                        {new Date(l.created_at).toLocaleDateString("ko-KR")} 생성
-                        {l.assigned_to && staffName[l.assigned_to]
-                          ? " · " + staffName[l.assigned_to] + " 담당"
-                          : ""}
-                        {dead ? " · 만료됨" : ""}
-                      </em>
-                    </span>
-                    <button
-                      className="submit sm"
-                      onClick={function () {
-                        copy(linkUrl(l.token), l.token);
-                      }}
-                    >
-                      {copied === l.token ? "복사됨" : "복사"}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          {admin ? (
+            showMake ? (
+              <div className="make-panel">
+                <div className="make-head">
+                  <p className="pub-label inline">아동에게 강화제 설문 링크 보내기</p>
+                  <button
+                    className="ghost"
+                    onClick={function () {
+                      setShowMake(false);
+                    }}
+                  >
+                    닫기
+                  </button>
+                </div>
+                <p className="pool-hint">
+                  이미 다니고 있는 아동이나 재평가가 필요한 아동에게 씁니다. 새로 등록하는
+                  아동은 [상담 신청서]에서 등록할 때 링크가 함께 만들어집니다.
+                </p>
+                <MakeTab
+                  childList={children}
+                  ensureChildren={ensureChildren}
+                  childErr={childErr}
+                  loadingChildren={loadingChildren}
+                  staff={staff}
+                  staffErr={staffErr}
+                  staffBusy={staffBusy}
+                  refetchStaff={fetchStaff}
+                  linkUrl={linkUrl}
+                  copy={copy}
+                  copied={copied}
+                  onMade={function () {}}
+                />
+              </div>
+            ) : (
+              <button
+                className="submit sm open-make"
+                onClick={function () {
+                  setShowMake(true);
+                }}
+              >
+                + 아동에게 링크 보내기
+              </button>
+            )
+          ) : null}
+
+          <p className="pub-label list-label">받은 응답</p>
+          <SurveyTab
+            surveys={surveys}
+            admin={admin}
+            staff={staff}
+            staffName={staffName}
+            onAssigned={function () {
+              setSurveys(null);
+            }}
+          />
         </div>
       ) : null}
     </div>
@@ -2920,6 +2886,11 @@ const CSS = `
 .savetag-error { background: #FDECEC; color: #A83232; }
 
 .reg-row { display: flex; gap: 10px; }
+.open-make { margin-top: 14px; }
+.make-panel { margin-top: 14px; padding: 14px; background: #FFF9FA;
+  border: 1px solid var(--line); border-radius: 12px; }
+.make-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.list-label { margin-top: 20px; }
 .staff-empty { padding: 10px 12px; background: #FFF6E6; border: 1px solid #E8B866;
   border-radius: 8px; margin-top: 4px; }
 .q-errmsg.small { font-size: 12px; margin-top: 6px; }
