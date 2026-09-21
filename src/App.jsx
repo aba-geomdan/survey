@@ -373,6 +373,38 @@ async function linkExistingChild(inquiryId, childId, childName, assignedTo) {
   );
 }
 
+/* 연결 해제 — 통합본에서 아동을 지웠을 때 문의를 다시 '상담예정'으로 돌린다.
+   그 아동 앞으로 나간 강화제 링크는 만료시켜, 없는 아동에게 응답이 쌓이지 않게 한다. */
+async function unlinkInquiry(id, childId) {
+  const r = await authedFetch(SUPABASE_URL + "/rest/v1/inquiries?id=eq." + id, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ child_id: null, status: "상담예정", assigned_to: null }),
+  });
+  if (!r.ok) throw new Error("연결을 해제하지 못했습니다 (HTTP " + r.status + ")");
+  const rows = await r.json();
+  if (childId) {
+    await authedFetch(
+      SUPABASE_URL + "/rest/v1/rein_links?child_id=eq." + encodeURIComponent(childId),
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ expires_at: new Date().toISOString() }),
+      }
+    );
+  }
+  return rows && rows[0];
+}
+
+/* 문의 삭제 */
+async function deleteInquiry(id) {
+  const r = await authedFetch(SUPABASE_URL + "/rest/v1/inquiries?id=eq." + id, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" },
+  });
+  if (!r.ok) throw new Error("삭제하지 못했습니다 (HTTP " + r.status + ")");
+}
+
 async function loadInquiries() {
   const url =
     SUPABASE_URL +
@@ -1657,6 +1689,10 @@ function InquiryTab(props) {
   const [filter, setFilter] = useState("전체");
   const [open, setOpen] = useState(null);
 
+  useEffect(function () {
+    if (props.admin) props.ensureChildren();
+  }, []);
+
   const list = props.inquiries;
   const shown = useMemo(
     function () {
@@ -1685,6 +1721,16 @@ function InquiryTab(props) {
       });
     });
     setOpen(row);
+  }
+
+  function removeRow(id) {
+    props.setInquiries(function (prev) {
+      if (!prev) return prev;
+      return prev.filter(function (x) {
+        return x.id !== id;
+      });
+    });
+    setOpen(null);
   }
 
   return (
@@ -1751,7 +1797,13 @@ function InquiryTab(props) {
                   ) : null}
                   <em className="row-sub">
                     {new Date(x.created_at).toLocaleDateString("ko-KR")} · {x.phone}
-                    {x.child_id ? " · 아동 연결됨" : ""}
+                    {x.child_id
+                      ? props.childList && !props.childList.some(function (c) {
+                          return c.id === x.child_id;
+                        })
+                        ? " · ⚠ 통합본에 없는 아동"
+                        : " · 아동 연결됨"
+                      : ""}
                   </em>
                 </span>
                 <span className="row-right">
@@ -1781,6 +1833,7 @@ function InquiryTab(props) {
             setOpen(null);
           }}
           onSaved={refreshRow}
+          onDeleted={removeRow}
           staff={props.staff}
           staffErr={props.staffErr}
           staffBusy={props.staffBusy}
@@ -1921,6 +1974,58 @@ function InquirySheet(props) {
       });
   }
 
+  /* 연결 해제 — 통합본에서 아동을 지운 뒤 문의를 다시 쓸 수 있게 */
+  function doUnlink() {
+    const ok = window.confirm(
+      "이 문의의 아동 연결을 해제할까요?\n\n" +
+      "· 상태가 '상담예정'으로 돌아갑니다\n" +
+      "· 이 아동 앞으로 보낸 강화제 링크는 만료됩니다\n" +
+      "· 통합본의 아동 기록은 건드리지 않습니다"
+    );
+    if (!ok) return;
+    setBusy(true);
+    setMsg("");
+    unlinkInquiry(row.id, row.child_id)
+      .then(function (updated) {
+        setBusy(false);
+        setStatus("상담예정");
+        latest.current.status = "상담예정";
+        setMadeUrl("");
+        setPickedStaff("");
+        setDupWarn("");
+        setUseExisting(false);
+        setMsg("연결을 해제했습니다. 필요하면 다시 등록하세요.");
+        props.onSaved(
+          updated ||
+            Object.assign({}, row, { child_id: null, status: "상담예정", assigned_to: null })
+        );
+      })
+      .catch(function (e) {
+        setBusy(false);
+        setMsg(e.message);
+      });
+  }
+
+  /* 문의 삭제 */
+  function doDelete() {
+    const ok = window.confirm(
+      (row.child_name || "이") + " 문의를 삭제할까요?\n\n" +
+      "상담 신청서 답변과 상담 메모가 모두 지워지며 되돌릴 수 없습니다.\n" +
+      "통합본의 아동 기록은 건드리지 않습니다."
+    );
+    if (!ok) return;
+    setBusy(true);
+    deleteInquiry(row.id)
+      .then(function () {
+        setBusy(false);
+        props.onDeleted(row.id);
+      })
+      .catch(function (e) {
+        setBusy(false);
+        setMsg(e.message);
+      });
+  }
+
   /* 되돌리기용 — 이미 통합본에 있는 아동과 잇기 */
   function connectExisting() {
     if (!pickedChild) {
@@ -2052,10 +2157,27 @@ function InquirySheet(props) {
         <div className="admin-box">
           <p className="pub-label">등록 확정</p>
           {row.child_id ? (
-            <p className="pool-hint">
-              이미 등록된 문의입니다 (아동 id {row.child_id}). 새 링크가 필요하면
-              [링크 만들기] 탭에서 만드세요.
-            </p>
+            <div>
+              {props.childList &&
+              !props.childList.some(function (c) {
+                return c.id === row.child_id;
+              }) ? (
+                <p className="dup-warn">
+                  이 문의에 연결된 아동이 통합본에 없습니다. 통합본에서 지우셨다면
+                  아래 [연결 해제]를 누르세요. 다시 등록할 수 있는 상태로 돌아갑니다.
+                </p>
+              ) : (
+                <p className="pool-hint">
+                  이미 등록된 문의입니다. 새 강화제 링크가 필요하면 [링크 만들기] 탭에서
+                  만드세요.
+                </p>
+              )}
+              <div className="made-btns mt">
+                <button className="ghost" onClick={doUnlink} disabled={busy}>
+                  {busy ? "처리 중…" : "연결 해제"}
+                </button>
+              </div>
+            </div>
           ) : (
             <div>
               <p className="pool-hint">
@@ -2245,6 +2367,9 @@ function InquirySheet(props) {
             </div>
           ) : null}
           {msg ? <p className="pool-hint">{msg}</p> : null}
+          <button className="linkish danger" onClick={doDelete} disabled={busy}>
+            이 문의 삭제
+          </button>
         </div>
         ) : null}
 
@@ -2807,6 +2932,7 @@ const CSS = `
 .linkish { display: block; margin-top: 10px; padding: 0; border: none;
   background: none; color: var(--muted); font: inherit; font-size: 12px;
   text-decoration: underline; cursor: pointer; }
+.linkish.danger { margin-top: 18px; color: #B04A4A; }
 
 .split { display: flex; gap: 14px; align-items: flex-start; margin-top: 12px; }
 .split-main { flex: 1 1 0; min-width: 0; }
