@@ -1392,6 +1392,8 @@ function StaffConsole(props) {
   const [tab, setTab] = useState(admin ? "inq" : "surveys");
 
   const [staff, setStaff] = useState([]);
+  const [staffErr, setStaffErr] = useState("");
+  const [staffBusy, setStaffBusy] = useState(false);
   const [children, setChildren] = useState(null);
   const [childErr, setChildErr] = useState("");
   const [loadingChildren, setLoadingChildren] = useState(false);
@@ -1403,14 +1405,28 @@ function StaffConsole(props) {
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState("");
 
+  function fetchStaff() {
+    setStaffBusy(true);
+    setStaffErr("");
+    staffList()
+      .then(function (list) {
+        setStaff(Array.isArray(list) ? list : []);
+        setStaffBusy(false);
+        if (!list || list.length === 0) {
+          setStaffErr("선생님 계정을 찾지 못했습니다.");
+        }
+      })
+      .catch(function (e) {
+        setStaff([]);
+        setStaffBusy(false);
+        setStaffErr((e && e.message) || "선생님 목록을 불러오지 못했습니다.");
+      });
+  }
+
   useEffect(
     function () {
       if (!admin) return;
-      staffList()
-        .then(setStaff)
-        .catch(function () {
-          setStaff([]);
-        });
+      fetchStaff();
     },
     [admin]
   );
@@ -1545,6 +1561,9 @@ function StaffConsole(props) {
           inquiries={inquiries}
           setInquiries={setInquiries}
           staff={staff}
+          staffErr={staffErr}
+          staffBusy={staffBusy}
+          refetchStaff={fetchStaff}
           staffName={staffName}
           childList={children}
           ensureChildren={ensureChildren}
@@ -1567,6 +1586,9 @@ function StaffConsole(props) {
           childErr={childErr}
           loadingChildren={loadingChildren}
           staff={staff}
+          staffErr={staffErr}
+          staffBusy={staffBusy}
+          refetchStaff={fetchStaff}
           linkUrl={linkUrl}
           copy={copy}
           copied={copied}
@@ -1760,6 +1782,9 @@ function InquiryTab(props) {
           }}
           onSaved={refreshRow}
           staff={props.staff}
+          staffErr={props.staffErr}
+          staffBusy={props.staffBusy}
+          refetchStaff={props.refetchStaff}
           childList={props.childList}
           childErr={props.childErr}
           loadingChildren={props.loadingChildren}
@@ -2065,22 +2090,42 @@ function InquirySheet(props) {
               </div>
 
               <p className="pub-label mt">담당 선생님</p>
-              <div className="chips">
-                {props.staff.map(function (s) {
-                  return (
-                    <Chip
-                      key={s.id}
-                      on={pickedStaff === s.id}
-                      onClick={function () {
-                        setPickedStaff(pickedStaff === s.id ? "" : s.id);
-                        setMsg("");
-                      }}
-                    >
-                      {s.name}
-                    </Chip>
-                  );
-                })}
-              </div>
+              {props.staff && props.staff.length > 0 ? (
+                <div className="chips">
+                  {props.staff.map(function (s) {
+                    return (
+                      <Chip
+                        key={s.id}
+                        on={pickedStaff === s.id}
+                        onClick={function () {
+                          setPickedStaff(pickedStaff === s.id ? "" : s.id);
+                          setMsg("");
+                        }}
+                      >
+                        {s.name}
+                      </Chip>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="staff-empty">
+                  <p className="pool-hint">
+                    {props.staffBusy
+                      ? "선생님 목록을 불러오는 중입니다…"
+                      : "선생님 목록을 불러오지 못했습니다. 아래 버튼을 눌러 다시 시도해 주세요."}
+                  </p>
+                  {props.staffErr ? (
+                    <p className="q-errmsg small">{props.staffErr}</p>
+                  ) : null}
+                  <button
+                    className="submit sm mt"
+                    onClick={props.refetchStaff}
+                    disabled={props.staffBusy}
+                  >
+                    {props.staffBusy ? "불러오는 중…" : "선생님 목록 다시 불러오기"}
+                  </button>
+                </div>
+              )}
 
               {dupWarn ? <p className="dup-warn">{dupWarn}</p> : null}
 
@@ -2313,6 +2358,7 @@ function MakeTab(props) {
               {props.loadingChildren ? "…" : "다시 불러오기"}
             </button>
           </div>
+          {props.childErr ? <p className="q-errmsg">{props.childErr}</p> : null}
           <ul className="rows">
             {filtered.map(function (c) {
               return (
@@ -2331,25 +2377,47 @@ function MakeTab(props) {
               );
             })}
             {filtered.length === 0 ? (
-              <li className="row row-empty">찾는 아동이 없습니다.</li>
+              <li className="row row-empty">
+                {query.trim()
+                  ? "찾는 아동이 없습니다."
+                  : "아동 목록이 비어 있습니다. [다시 불러오기]를 눌러 보세요."}
+              </li>
             ) : null}
           </ul>
           <p className="pub-label">담당 선생님 (응답을 볼 수 있는 계정)</p>
-          <div className="chips">
-            {props.staff.map(function (s) {
-              return (
-                <Chip
-                  key={s.id}
-                  on={pickedStaff === s.id}
-                  onClick={function () {
-                    setPickedStaff(pickedStaff === s.id ? "" : s.id);
-                  }}
-                >
-                  {s.name}
-                </Chip>
-              );
-            })}
-          </div>
+          {props.staff && props.staff.length > 0 ? (
+            <div className="chips">
+              {props.staff.map(function (s) {
+                return (
+                  <Chip
+                    key={s.id}
+                    on={pickedStaff === s.id}
+                    onClick={function () {
+                      setPickedStaff(pickedStaff === s.id ? "" : s.id);
+                    }}
+                  >
+                    {s.name}
+                  </Chip>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="staff-empty">
+              <p className="pool-hint">
+                {props.staffBusy
+                  ? "선생님 목록을 불러오는 중입니다…"
+                  : "선생님 목록을 불러오지 못했습니다."}
+              </p>
+              {props.staffErr ? <p className="q-errmsg small">{props.staffErr}</p> : null}
+              <button
+                className="submit sm mt"
+                onClick={props.refetchStaff}
+                disabled={props.staffBusy}
+              >
+                {props.staffBusy ? "불러오는 중…" : "선생님 목록 다시 불러오기"}
+              </button>
+            </div>
+          )}
           {err ? <p className="q-errmsg">{err}</p> : null}
           <button className="submit" onClick={make}>
             링크 만들기
@@ -2727,6 +2795,9 @@ const CSS = `
 .savetag-error { background: #FDECEC; color: #A83232; }
 
 .reg-row { display: flex; gap: 10px; }
+.staff-empty { padding: 10px 12px; background: #FFF6E6; border: 1px solid #E8B866;
+  border-radius: 8px; margin-top: 4px; }
+.q-errmsg.small { font-size: 12px; margin-top: 6px; }
 .reg-col { flex: 1; min-width: 0; }
 .reg-lab { font-size: 11px; color: var(--muted); }
 .reg-col .inp { margin-top: 4px; }
