@@ -651,32 +651,34 @@ function collectPool(answers) {
 }
 
 function answerText(q, val) {
-  if (!val) return "";
-  if (q.type === "single") {
-    const parts = [];
-    if (val.v) parts.push(val.v);
-    if (val.etc) parts.push(val.etc);
-    return parts.join(" · ");
+  // 값의 모양이 예상과 달라도 절대 멈추지 않게 — 통합본 화면 전체를 지키기 위해
+  try {
+    if (!val || typeof val !== "object") return val == null ? "" : String(val);
+    const str = (x) => (x == null ? "" : String(x));
+    const list = (x) => (Array.isArray(x) ? x.map(str).filter(Boolean) : (x ? [str(x)] : []));
+    if (q.type === "single") {
+      return [str(val.v), str(val.etc)].filter(Boolean).join(" · ");
+    }
+    if (q.type === "multi" || q.type === "pick") {
+      const parts = list(val.v);
+      if (val.etc) parts.push(str(val.etc));
+      if (val.detail) parts.push("→ " + str(val.detail));
+      return parts.join(", ");
+    }
+    if (q.type === "yesno") {
+      if (val.v === "있음") return "있음 — " + (str(val.detail) || "(내용 없음)");
+      return str(val.v);
+    }
+    if (q.type === "rank") {
+      return list(val.v).length === 0 ? "" : (Array.isArray(val.v) ? val.v : [val.v])
+        .map((t, i) => (t ? i + 1 + "위 " + str(t) : ""))
+        .filter(Boolean)
+        .join("  /  ");
+    }
+    return str(val.v);
+  } catch (e) {
+    return "";
   }
-  if (q.type === "multi" || q.type === "pick") {
-    const parts = (val.v || []).slice();
-    if (val.etc) parts.push(val.etc);
-    if (val.detail) parts.push("→ " + val.detail);
-    return parts.join(", ");
-  }
-  if (q.type === "yesno") {
-    if (val.v === "있음") return "있음 — " + (val.detail || "(내용 없음)");
-    return val.v || "";
-  }
-  if (q.type === "rank") {
-    return (val.v || [])
-      .map(function (t, i) {
-        return t ? i + 1 + "위 " + t : "";
-      })
-      .filter(Boolean)
-      .join("  /  ");
-  }
-  return val.v || "";
 }
 
 function validateAnswers(qs, answers) {
