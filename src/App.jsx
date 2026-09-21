@@ -395,6 +395,15 @@ async function deleteInquiry(id) {
   if (!r.ok) throw new Error("삭제하지 못했습니다 (HTTP " + r.status + ")");
 }
 
+/* 강화제 응답 삭제 */
+async function deleteSurvey(id) {
+  const r = await authedFetch(SUPABASE_URL + "/rest/v1/rein_surveys?id=eq." + id, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" },
+  });
+  if (!r.ok) throw new Error("삭제하지 못했습니다 (HTTP " + r.status + ")");
+}
+
 async function loadInquiries() {
   const url =
     SUPABASE_URL +
@@ -1636,6 +1645,9 @@ function StaffConsole(props) {
           <p className="pub-label list-label">받은 응답</p>
           <SurveyTab
             surveys={surveys}
+            setSurveys={setSurveys}
+            childList={children}
+            ensureChildren={ensureChildren}
             admin={admin}
             staff={staff}
             staffName={staffName}
@@ -2524,7 +2536,46 @@ function MakeTab(props) {
 function SurveyTab(props) {
   const [open, setOpen] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
   const list = props.surveys;
+
+  // 통합본에서 지운 아동의 응답을 가려내려고 아동 목록을 함께 불러온다
+  useEffect(function () {
+    if (props.admin) props.ensureChildren();
+  }, []);
+
+  function isOrphan(childId) {
+    if (!props.childList) return false;   // 목록을 못 불러왔으면 표시하지 않는다
+    return !props.childList.some(function (c) {
+      return c.id === childId;
+    });
+  }
+
+  function removeOne(row) {
+    const ok = window.confirm(
+      row.child_name + " 아동의 강화제 응답을 삭제할까요?\n\n" +
+      "학부모가 보낸 답변이 지워지며 되돌릴 수 없습니다.\n" +
+      "통합본의 아동 기록은 건드리지 않습니다."
+    );
+    if (!ok) return;
+    setBusy(true);
+    setErr("");
+    deleteSurvey(row.id)
+      .then(function () {
+        setBusy(false);
+        setOpen(null);
+        props.setSurveys(function (prev) {
+          if (!prev) return prev;
+          return prev.filter(function (x) {
+            return x.id !== row.id;
+          });
+        });
+      })
+      .catch(function (e) {
+        setBusy(false);
+        setErr(e.message);
+      });
+  }
 
   function assign(id, userId) {
     setBusy(true);
@@ -2562,6 +2613,7 @@ function SurveyTab(props) {
                       ? " · " + (props.staffName[s.assigned_to] || "배정됨")
                       : " · 미배정"
                     : ""}
+                  {props.admin && isOrphan(s.child_id) ? " · ⚠ 통합본에 없는 아동" : ""}
                 </em>
               </span>
               <button
@@ -2641,7 +2693,29 @@ function SurveyTab(props) {
               </div>
             ) : null}
 
+            {props.admin && isOrphan(open.child_id) ? (
+              <p className="dup-warn">
+                이 응답의 아동이 통합본에 없습니다. 통합본에서 지우셨다면 아래
+                [이 응답 삭제]로 정리하세요.
+              </p>
+            ) : null}
+
             <Detail questions={REIN_Q} answers={open.answers} />
+
+            {props.admin ? (
+              <div>
+                {err ? <p className="q-errmsg">{err}</p> : null}
+                <button
+                  className="linkish danger"
+                  onClick={function () {
+                    removeOne(open);
+                  }}
+                  disabled={busy}
+                >
+                  이 응답 삭제
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
