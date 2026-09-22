@@ -434,20 +434,20 @@ const REIN_Q = [
     options: ["어머니", "아버지", "조부모"], etc: true, required: true },
 
   { sec: "안전 확인", note: "수업에서 반드시 지켜야 할 내용입니다." },
-  { id: "allergy", n: 2, label: "알레르기가 있거나 먹으면 안 되는 음식이 있습니까?",
-    type: "yesno", detailLabel: "어떤 음식인지 적어주세요", required: true },
-  { id: "choking", n: 3, label: "삼킴 위험이나 질감 때문에 피해야 할 것이 있습니까?",
+  { id: "allergy", n: 2, label: "알레르기가 있거나 먹으면 안 되는 음식이 있나요?",
+    type: "yesno", detailLabel: "어떤 음식인지 적어 주세요", required: true },
+  { id: "choking", n: 3, label: "삼킴 위험이나 질감 때문에 피해야 할 것이 있나요?",
     type: "yesno", detailLabel: "예: 견과류, 작은 부품", required: true },
 
-  { sec: "좋아하는 것", note: "해당하는 것을 모두 눌러주세요. 없으면 넘어가셔도 됩니다." },
+  { sec: "좋아하는 것", note: "해당하는 것을 모두 눌러 주세요. 없으면 넘어가셔도 됩니다." },
   { id: "food", n: 4, label: "음식·간식", type: "multi",
     options: ["과자류", "초콜릿류", "젤리·사탕", "빵·케이크", "과일", "아이스크림", "시리얼"],
-    etc: true, detailLabel: "구체적인 제품명을 아시면 적어주세요" },
+    etc: true, detailLabel: "구체적인 제품명을 아시면 적어 주세요" },
   { id: "drink", n: 5, label: "음료", type: "multi",
     options: ["물", "우유", "주스", "요구르트", "탄산음료"], etc: true },
   { id: "toy", n: 6, label: "장난감·책", type: "multi",
     options: ["자동차·기차", "블록·레고", "인형·피규어", "퍼즐", "공", "그림책", "소리 나는 장난감"],
-    etc: true, detailLabel: "특별히 좋아하는 이름이 있으면 적어주세요" },
+    etc: true, detailLabel: "특별히 좋아하는 이름이 있으면 적어 주세요" },
   { id: "media", n: 7, label: "영상·노래·캐릭터", type: "multi",
     options: ["유튜브", "TV 만화", "노래·동요", "특정 캐릭터"],
     etc: true, detailLabel: "채널명·프로그램명·캐릭터 이름" },
@@ -462,28 +462,28 @@ const REIN_Q = [
     etc: true },
   { id: "place", n: 11, label: "장소", type: "multi",
     options: ["놀이터", "키즈카페", "마트", "공원", "차 안", "집 특정 공간"], etc: true },
-  { id: "person", n: 12, label: "가장 좋아하는 사람", type: "multi",
+  { id: "person", n: 12, label: "좋아하는 사람", type: "multi",
     options: ["엄마", "아빠", "형제자매", "조부모", "또래 친구"], etc: true },
 
-  { sec: "순위", note: "앞에서 고르신 것들이 아래에 뜹니다. 눌러서 채우거나 직접 적어주세요." },
-  { id: "rank", n: 13, label: "가장 좋아하는 것을 순서대로 적어주세요", type: "rank", required: true },
+  { sec: "순위", note: "앞에서 고르신 것들이 아래에 뜹니다. 눌러서 채우거나 직접 적어 주세요." },
+  { id: "rank", n: 13, label: "가장 좋아하는 것을 순서대로 적어 주세요", type: "rank", required: true },
 
   { sec: "집에서는 어떤가요" },
   { id: "always", n: 14, label: "집에서 아이가 언제든 가질 수 있는 것", type: "pick" },
   { id: "special", n: 15, label: "특별한 때만 주는 것", type: "pick" },
 
   { sec: "수업에서의 사용" },
-  { id: "avoid", n: 16, label: "수업에서 사용하지 않았으면 하는 것이 있습니까?",
-    type: "yesno", detailLabel: "무엇을, 어떤 이유인지 적어주세요", required: true },
+  { id: "avoid", n: 16, label: "수업에서 사용하지 않았으면 하는 것이 있나요?",
+    type: "yesno", detailLabel: "무엇을, 어떤 이유인지 적어 주세요", required: true },
   { id: "unlimited", n: 17, label: "수업에서 제한 없이 사용해도 되는 것", type: "pick" },
 
   { sec: "그 밖에" },
   { id: "dislike", n: 18, label: "아이가 정말 싫어하는 것", type: "multi",
     options: ["큰 소리", "특정 촉감", "낯선 사람", "기다리기", "정리하기", "옷 갈아입기"], etc: true },
-  { id: "extra", n: 19, label: "더 알려주고 싶은 것이 있으면 자유롭게 적어주세요", type: "text" },
+  { id: "extra", n: 19, label: "더 알려주고 싶은 것이 있으면 자유롭게 적어 주세요", type: "text" },
 ];
 
-/* 상담 전 사전 설문 — 10번(걱정되는 부분) 선택에 따라 뒤 문항이 갈린다.
+/* 상담 전 사전 설문 — 8번(신경 쓰이는 부분) 선택에 따라 뒤 문항이 갈린다.
    showIf 가 붙은 문항·구역은 그 값을 고른 사람에게만 보인다. */
 const CONCERNS = [
   "말·의사소통",
@@ -506,17 +506,16 @@ const INQ_Q = [
     options: ["어머니", "아버지", "조부모"], etc: true },
   { id: "phone", n: 6, label: "연락처", type: "tel", required: true,
     placeholder: "010-0000-0000" },
-  { id: "callTime", n: 7, label: "연락 가능한 시간대", type: "single",
-    options: ["오전", "오후", "저녁", "아무 때나"] },
 
   { sec: "현재 상황" },
-  { id: "school", n: 8, label: "교육기관", type: "single",
+  { id: "school", n: 7, label: "교육기관", type: "single",
     options: ["미등원", "어린이집", "유치원", "초등학교", "중학교 이상"] },
-  { id: "grade", n: 9, label: "학년·반", type: "line" },
+  { id: "grade", n: "7-1", label: "학년·반", type: "line",
+    showIf: { id: "school", anyOf: ["어린이집", "유치원", "초등학교", "중학교 이상"] } },
 
-  { sec: "어떤 부분이 궁금하신가요",
+  { sec: "요즘 신경 쓰이는 부분",
     note: "아이를 판단하기 위한 것이 아니라, 상담 때 무엇부터 이야기 나눌지 정하기 위한 것입니다. 고르신 것에 맞는 질문만 아래에 나옵니다." },
-  { id: "concern", n: 10, label: "요즘 가장 도움이 필요한 부분", type: "multi",
+  { id: "concern", n: 8, label: "도움이 필요한 부분을 모두 골라 주세요", type: "multi",
     options: CONCERNS, required: true },
 
   /* ── 행동 ────────────────────────────────────────────── */
@@ -536,9 +535,9 @@ const INQ_Q = [
     note: "예: 안아서 진정시킨다 · 원하는 걸 들어준다 · 잠시 두고 본다",
     showIf: { id: "concern", anyOf: ["행동"] } },
   { id: "bInjury", n: "B5", label: "다치거나 다치게 한 적이 있나요?", type: "yesno",
-    detailLabel: "어떤 상황이었는지 간단히 적어주세요",
+    detailLabel: "어떤 상황이었는지 간단히 적어 주세요",
     showIf: { id: "concern", anyOf: ["행동"] } },
-  { id: "bGood", n: "B6", label: "반대로, 잘 지내는 상황도 알려주세요", type: "text",
+  { id: "bGood", n: "B6", label: "반대로, 잘 지내는 상황도 알려 주세요", type: "text",
     note: "예: 혼자 놀 때는 괜찮다 · 아빠랑 있을 때는 덜하다",
     showIf: { id: "concern", anyOf: ["행동"] } },
 
@@ -588,17 +587,17 @@ const INQ_Q = [
     showIf: { id: "concern", anyOf: ["일상생활"] } },
 
   { sec: "희망 사항" },
-  { id: "days", n: 11, label: "희망 요일", type: "multi",
-    options: ["월", "화", "수", "목", "금", "토"] },
-  { id: "times", n: 12, label: "희망 시간대", type: "multi",
+  { id: "days", n: 9, label: "희망 요일", type: "multi",
+    options: ["월", "화", "수", "목", "금"] },
+  { id: "times", n: 10, label: "희망 시간대", type: "multi",
     options: ["오전", "이른 오후", "늦은 오후", "저녁"] },
-  { id: "start", n: 13, label: "언제부터 시작하고 싶으신가요?", type: "single",
+  { id: "start", n: 11, label: "언제부터 시작하고 싶으신가요?", type: "single",
     options: ["바로", "1개월 내", "2~3개월 내", "아직 미정"] },
-  { id: "report", n: 14, label: "검사 보고서를 가지고 계신가요?", type: "single",
+  { id: "report", n: 12, label: "검사 보고서를 가지고 계신가요?", type: "single",
     options: ["있음", "없음", "진행 중"], note: "있으시면 상담 때 가져와 주세요." },
-  { id: "source", n: 15, label: "저희를 어떻게 알게 되셨나요?", type: "single", required: true,
+  { id: "source", n: 13, label: "저희를 어떻게 알게 되셨나요?", type: "single", required: true,
     options: ["홈페이지", "인스타그램", "블로그", "지인 소개", "인쇄물·현수막", "검색"], etc: true },
-  { id: "question", n: 16, label: "궁금하신 점", type: "text" },
+  { id: "question", n: 14, label: "궁금하신 점", type: "text" },
 ];
 
 /* 분기 판정 — showIf 가 없으면 항상 보인다 */
@@ -693,20 +692,20 @@ function validateAnswers(qs, answers) {
       e[q.id] = "하나 이상 선택해 주세요.";
     if (q.type === "yesno") {
       if (!a.v) e[q.id] = "선택해 주세요.";
-      else if (a.v === "있음" && !(a.detail || "").trim()) e[q.id] = "내용을 적어주세요.";
+      else if (a.v === "있음" && !(a.detail || "").trim()) e[q.id] = "내용을 적어 주세요.";
     }
     if (q.type === "rank") {
       const filled = (a.v || []).filter(function (t) {
         return (t || "").trim();
       });
-      if (filled.length < 3) e[q.id] = "적어도 3개는 적어주세요.";
+      if (filled.length < 3) e[q.id] = "적어도 3개는 적어 주세요.";
     }
     if (q.type === "date") {
       const p = (a.v || "").split("-");
-      if (p.length !== 3 || !p[0] || !p[1] || !p[2]) e[q.id] = "연도·월·일을 모두 골라주세요.";
+      if (p.length !== 3 || !p[0] || !p[1] || !p[2]) e[q.id] = "연도·월·일을 모두 골라 주세요.";
     }
     if (q.type === "line" || q.type === "tel" || q.type === "text") {
-      if (!(a.v || "").trim()) e[q.id] = "적어주세요.";
+      if (!(a.v || "").trim()) e[q.id] = "적어 주세요.";
     }
   });
   return e;
@@ -1209,7 +1208,7 @@ function ReinSurvey(props) {
         }
       })
       .catch(function (err) {
-        setSendError((err && err.message) || "저장하지 못했습니다. 잠시 후 다시 눌러주세요.");
+        setSendError((err && err.message) || "저장하지 못했습니다. 잠시 후 다시 눌러 주세요.");
         setPhase("form");
       });
   }
@@ -1244,7 +1243,7 @@ function ReinSurvey(props) {
         <h1 className="hero-title">
           <span className="hero-name">{childName}</span> 아동이
           <br />
-          좋아하는 것을 알려주세요
+          좋아하는 것을 알려 주세요
         </h1>
         <p className="hero-body">
           아이가 좋아하는 것을 수업에서 활용하기 위한 자료입니다. 약 5분 걸립니다.
@@ -1272,7 +1271,7 @@ function ReinSurvey(props) {
         {phase === "sending" ? "보내는 중…" : "제출하기"}
       </button>
       <p className="foot">
-        적어주신 내용은 담당 선생님만 볼 수 있으며, 수업 준비에만 사용됩니다.
+        적어 주신 내용은 담당 선생님과 원장만 볼 수 있으며, 수업 준비에만 사용됩니다.
       </p>
     </div>
   );
@@ -1300,7 +1299,7 @@ function InquiryForm() {
         }
       })
       .catch(function (err) {
-        setSendError((err && err.message) || "보내지 못했습니다. 잠시 후 다시 눌러주세요.");
+        setSendError((err && err.message) || "보내지 못했습니다. 잠시 후 다시 눌러 주세요.");
         setPhase("form");
       });
   }
@@ -1337,7 +1336,7 @@ function InquiryForm() {
         {phase === "sending" ? "보내는 중…" : "제출하기"}
       </button>
       <p className="foot">
-        적어주신 내용은 상담 준비에만 사용되며, 담당자만 확인합니다.
+        적어 주신 내용은 상담 준비에만 사용되며, 원장과 담당 선생님만 확인합니다.
       </p>
     </div>
   );
@@ -1728,7 +1727,7 @@ function InquiryTab(props) {
           {props.copied === "pub" ? "복사했습니다" : "주소 복사"}
         </button>
         <p className="made-hint">
-          상담 일정을 잡으신 뒤 학부모께 문자로 보내주세요. 주소는 하나로 고정이며
+          상담 일정을 잡으신 뒤 학부모께 문자로 보내 주세요. 주소는 하나로 고정이며
           만료되지 않습니다.
         </p>
       </div>
@@ -1928,7 +1927,7 @@ function InquirySheet(props) {
         setStatus("등록");
         setDupWarn("");
         setBusy(false);
-        setMsg("등록했습니다. 통합본에 아동이 만들어졌습니다. 아래 링크를 학부모께 보내주세요.");
+        setMsg("등록했습니다. 통합본에 아동이 만들어졌습니다. 아래 링크를 학부모께 보내 주세요.");
         props.onSaved(
           Object.assign({}, row, {
             child_id: res.child_id,
@@ -2023,7 +2022,7 @@ function InquirySheet(props) {
         setMadeUrl(props.linkUrl(token));
         setStatus("등록");
         setBusy(false);
-        setMsg("연결했습니다. 아래 링크를 학부모께 보내주세요.");
+        setMsg("연결했습니다. 아래 링크를 학부모께 보내 주세요.");
         props.onSaved(
           Object.assign({}, row, {
             child_id: pickedChild.id,
@@ -2423,7 +2422,7 @@ function MakeTab(props) {
             다른 아동
           </button>
         </div>
-        <p className="made-hint">이 링크를 학부모께 보내주세요. 30일 뒤 만료됩니다.</p>
+        <p className="made-hint">이 링크를 학부모께 보내 주세요. 30일 뒤 만료됩니다.</p>
       </div>
     );
   }
