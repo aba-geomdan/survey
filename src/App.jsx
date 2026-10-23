@@ -512,7 +512,7 @@ const REIN_FORM_Q = REIN_Q.filter(function (q) {
    showIf 가 붙은 문항·구역은 그 값을 고른 사람에게만 보인다. */
 const CONCERNS = [
   "말·의사소통",
-  "행동",
+  "도움이 필요한 행동",
   "또래·사회성",
   "학습·학교 준비",
   "일상생활",
@@ -525,67 +525,51 @@ const INQ_Q = [
   { id: "childName", n: 1, label: "아동 이름", type: "line", required: true },
   { id: "birth", n: 2, label: "생년월일", type: "date", required: true },
   { id: "sex", n: 3, label: "성별", type: "single", options: ["남", "여"] },
+  { id: "siblings", n: 4, label: "형제자매", type: "line", placeholder: "예: 2살 위 누나 · 없음" },
+  { id: "school", n: 5, label: "교육기관", type: "single",
+    options: ["미등원", "어린이집", "유치원", "초등학교", "중학교 이상"] },
 
   { sec: "보호자 연락처" },
-  { id: "guardian", n: 4, label: "보호자 성함", type: "line", required: true },
-  { id: "relation", n: 5, label: "아동과의 관계", type: "single",
-    options: ["어머니", "아버지", "조부모"], etc: true },
-  { id: "phone", n: 6, label: "연락처", type: "tel", required: true,
+  { id: "guardian", n: 6, label: "보호자 성함과 관계", type: "line", required: true,
+    placeholder: "예: 김○○ (어머니)" },
+  { id: "phone", n: 7, label: "연락처", type: "tel", required: true,
     placeholder: "010-0000-0000" },
 
-  { sec: "현재 상황" },
-  { id: "school", n: 7, label: "교육기관", type: "single",
-    options: ["미등원", "어린이집", "유치원", "초등학교", "중학교 이상"] },
-  { id: "grade", n: "7-1", label: "학년·반", type: "line",
-    showIf: { id: "school", anyOf: ["어린이집", "유치원", "초등학교", "중학교 이상"] } },
-  { id: "therapy", n: 8, label: "지금 다른 곳에서 받고 있는 치료가 있나요?", type: "multi",
+  { sec: "발달·치료 이력", note: "알고 계신 만큼만 적어 주시면 됩니다." },
+  { id: "diagnosis", n: 8, label: "발달 관련 검사나 진단을 받은 적이 있나요?", type: "single",
+    options: ["없음", "검사만 받음", "진단 받음", "진행 중"],
+    note: "진단명은 적지 않으셔도 됩니다. 검사 보고서가 있으시면 상담 때 가져와 주세요." },
+  { id: "therapy", n: 9, label: "받고 있거나 받았던 치료·교육이 있나요?", type: "multi",
     options: ["언어치료", "감각통합치료", "놀이치료", "미술·음악치료", "ABA·행동치료", "없음"], etc: true,
     exclusive: ["없음"] },
 
-  { sec: "요즘 신경 쓰이는 부분",
-    note: "아이를 판단하기 위한 것이 아니라, 상담 때 무엇부터 이야기 나눌지 정하기 위한 것입니다. 고르신 것에 맞는 질문만 아래에 나옵니다." },
-  { id: "concern", n: 9, label: "도움이 필요한 부분을 모두 골라 주세요", type: "multi",
-    options: CONCERNS, required: true },
+  { sec: "요즘 아이 모습" },
+  { id: "requestHow", n: 10, label: "원하는 것이 있을 때 주로 어떻게 알리나요?", type: "multi",
+    options: ["말로 한다", "가리킨다", "손을 끌고 간다", "그림·카드를 쓴다", "몸짓으로 알린다", "울거나 떼를 쓴다"],
+    etc: true },
+  { id: "hardest", n: 11, label: "요즘 가장 어려운 점과, 주로 어떤 때 그런지 적어 주세요", type: "text",
+    note: "예: 원하는 걸 못 하게 하면 울면서 누워요 · 어린이집 등원할 때 힘들어해요" },
+  { id: "concern", n: 12, label: "도움이 필요한 부분을 모두 골라 주세요", type: "multi",
+    options: CONCERNS, required: true, note: "고르신 것에 맞는 짧은 질문이 아래에 나옵니다." },
 
-  /* ── 행동 ────────────────────────────────────────────── */
-  { sec: "행동에 대해", showIf: { id: "concern", anyOf: ["행동"] } },
-  { id: "bWhen", n: "B1", label: "어떤 상황에서 주로 나타나나요?", type: "multi",
-    options: ["하고 싶은 걸 못 하게 할 때", "하기 싫은 걸 시킬 때", "원하는 게 있을 때",
-      "갑자기 계획이 바뀔 때", "사람이 많거나 시끄러울 때", "특별한 상황 없이", "잘 모르겠음"],
-    etc: true, showIf: { id: "concern", anyOf: ["행동"] } },
-  { id: "bHow", n: "B2", label: "어떤 모습으로 나타나나요?", type: "multi",
-    options: ["울거나 소리 지름", "바닥에 눕거나 버팀", "물건을 던지거나 부숨",
-      "사람을 때리거나 밈", "자기 몸을 때리거나 부딪침", "자리를 벗어남", "말로 거칠게 표현함"],
-    etc: true, showIf: { id: "concern", anyOf: ["행동"] } },
-  { id: "bFreq", n: "B3", label: "얼마나 자주 있나요?", type: "single",
-    options: ["하루에 여러 번", "하루 한 번쯤", "일주일에 몇 번", "가끔"],
-    showIf: { id: "concern", anyOf: ["행동"] } },
-  { id: "bResponse", n: "B4", label: "그럴 때 보호자께서는 주로 어떻게 하시나요?", type: "text",
-    note: "예: 안아서 진정시킨다 · 원하는 걸 들어준다 · 잠시 두고 본다",
-    showIf: { id: "concern", anyOf: ["행동"] } },
-  { id: "bInjury", n: "B5", label: "다치거나 다치게 한 적이 있나요?", type: "yesno",
-    detailLabel: "어떤 상황이었는지 간단히 적어 주세요",
-    showIf: { id: "concern", anyOf: ["행동"] } },
-  { id: "bGood", n: "B6", label: "반대로, 잘 지내는 상황도 알려 주세요", type: "text",
-    note: "예: 혼자 놀 때는 괜찮다 · 아빠랑 있을 때는 덜하다",
-    showIf: { id: "concern", anyOf: ["행동"] } },
-
-  /* ── 말·의사소통 ──────────────────────────────────────── */
+  /* ── 고른 부분마다 2문항 ─────────────────────────────── */
   { sec: "말·의사소통에 대해", showIf: { id: "concern", anyOf: ["말·의사소통"] } },
   { id: "lExpress", n: "L1", label: "지금 어떻게 표현하나요?", type: "single",
     options: ["아직 말이 나오지 않음", "단어 하나", "두세 단어 조합", "문장으로 말함"],
     showIf: { id: "concern", anyOf: ["말·의사소통"] } },
-  { id: "lEcho", n: "L2", label: "들은 말을 그대로 따라 하는 경우가 있나요?", type: "single",
-    options: ["거의 없음", "가끔 있음", "자주 있음"],
-    showIf: { id: "concern", anyOf: ["말·의사소통"] } },
-  { id: "lUnderstand", n: "L3", label: "어른 말은 얼마나 이해하나요?", type: "single",
+  { id: "lUnderstand", n: "L2", label: "어른의 말은 얼마나 이해하나요?", type: "single",
     options: ["이름 부르면 반응", "간단한 지시를 따름", "두 단계 지시를 따름", "잘 모르겠음"],
     showIf: { id: "concern", anyOf: ["말·의사소통"] } },
-  { id: "lAac", n: "L4", label: "말 외에 쓰는 방법이 있나요?", type: "multi",
-    options: ["손짓·가리키기", "그림카드", "기기", "없음"], etc: true, exclusive: ["없음"],
-    showIf: { id: "concern", anyOf: ["말·의사소통"] } },
 
-  /* ── 또래·사회성 ──────────────────────────────────────── */
+  { sec: "도움이 필요한 행동에 대해", showIf: { id: "concern", anyOf: ["도움이 필요한 행동", "행동"] } },
+  { id: "bHow", n: "B1", label: "어떤 모습으로 나타나나요?", type: "multi",
+    options: ["울거나 소리 지름", "바닥에 눕거나 버팀", "물건을 던지거나 부숨",
+      "사람을 때리거나 밈", "자기 몸을 때리거나 부딪침", "자리를 벗어남", "말로 거칠게 표현함"],
+    etc: true, showIf: { id: "concern", anyOf: ["도움이 필요한 행동", "행동"] } },
+  { id: "bInjury", n: "B2", label: "다치거나 다치게 한 적이 있나요?", type: "yesno",
+    detailLabel: "어떤 상황이었는지 간단히 적어 주세요",
+    showIf: { id: "concern", anyOf: ["도움이 필요한 행동", "행동"] } },
+
   { sec: "또래·사회성에 대해", showIf: { id: "concern", anyOf: ["또래·사회성"] } },
   { id: "sPeer", n: "S1", label: "또래와 있을 때 어떤가요?", type: "single",
     options: ["관심 없어 보임", "관심은 있는데 다가가지 못함", "다가가지만 방식이 서툼", "잘 어울림"],
@@ -593,10 +577,7 @@ const INQ_Q = [
   { id: "sEye", n: "S2", label: "눈맞춤은 어떤가요?", type: "single",
     options: ["잘 안 함", "가끔 함", "자주 함"],
     showIf: { id: "concern", anyOf: ["또래·사회성"] } },
-  { id: "sHard", n: "S3", label: "특별히 어려워하는 상황", type: "text",
-    showIf: { id: "concern", anyOf: ["또래·사회성"] } },
 
-  /* ── 학습·학교 준비 ───────────────────────────────────── */
   { sec: "학습·학교 준비에 대해", showIf: { id: "concern", anyOf: ["학습·학교 준비"] } },
   { id: "aSit", n: "A1", label: "앉아서 하는 활동을 얼마나 유지하나요?", type: "single",
     options: ["1분도 어려움", "1~2분", "5분쯤", "10분 이상"],
@@ -604,39 +585,48 @@ const INQ_Q = [
   { id: "aHard", n: "A2", label: "어려워하는 부분", type: "multi",
     options: ["지시 따르기", "차례 기다리기", "집중 유지", "글자·숫자", "손 쓰는 활동"],
     etc: true, showIf: { id: "concern", anyOf: ["학습·학교 준비"] } },
-  { id: "aFeedback", n: "A3", label: "학교·유치원에서 들은 이야기가 있나요?", type: "text",
-    showIf: { id: "concern", anyOf: ["학습·학교 준비"] } },
 
-  /* ── 일상생활 ─────────────────────────────────────────── */
   { sec: "일상생활에 대해", showIf: { id: "concern", anyOf: ["일상생활"] } },
   { id: "dToilet", n: "D1", label: "배변", type: "single",
     options: ["아직 기저귀를 사용해요", "어른이 시간 맞춰 데려가요", "스스로 표현해요", "스스로 해결해요"],
     showIf: { id: "concern", anyOf: ["일상생활"] } },
-  { id: "dMeal", n: "D2", label: "식사", type: "single",
-    options: ["도움이 많이 필요", "조금 도와주면 됨", "스스로 함"],
-    showIf: { id: "concern", anyOf: ["일상생활"] } },
-  { id: "dPicky", n: "D3", label: "편식", type: "single",
-    options: ["심하지 않음", "조금 있음", "심함"],
-    showIf: { id: "concern", anyOf: ["일상생활"] } },
-  { id: "dSleep", n: "D4", label: "수면", type: "single",
-    options: ["잘 잠", "잠들기 어려움", "자주 깸", "잘 모르겠음"],
-    showIf: { id: "concern", anyOf: ["일상생활"] } },
-  { id: "dHard", n: "D5", label: "특별히 힘든 부분", type: "text",
-    showIf: { id: "concern", anyOf: ["일상생활"] } },
+  { id: "dDaily", n: "D2", label: "식사·수면에서 어려운 점", type: "multi",
+    options: ["혼자 먹기 어려움", "편식이 심함", "잠들기 어려움", "자주 깸", "특별히 없음"],
+    etc: true, exclusive: ["특별히 없음"], showIf: { id: "concern", anyOf: ["일상생활"] } },
 
   { sec: "희망 사항" },
-  { id: "days", n: 10, label: "희망 요일", type: "multi",
+  { id: "days", n: 13, label: "희망 요일", type: "multi",
     options: ["월", "화", "수", "목", "금"] },
-  { id: "times", n: 11, label: "희망 시간대", type: "multi",
+  { id: "times", n: 14, label: "희망 시간대", type: "multi",
     options: ["오전", "이른 오후 (12~3시)", "늦은 오후 (3~6시)"] },
-  { id: "start", n: 12, label: "언제부터 시작하고 싶으신가요?", type: "single",
-    options: ["바로", "1개월 내", "2~3개월 내", "아직 미정"] },
-  { id: "report", n: 13, label: "검사 보고서를 가지고 계신가요?", type: "single",
-    options: ["있음", "없음", "진행 중"], note: "있으시면 상담 때 가져와 주세요." },
-  { id: "source", n: 14, label: "저희를 어떻게 알게 되셨나요?", type: "single", required: true,
+  { id: "source", n: 15, label: "저희를 어떻게 알게 되셨나요?", type: "single", required: true,
     options: ["홈페이지", "인스타그램", "블로그", "지인 소개", "인쇄물·현수막", "검색"], etc: true },
-  { id: "question", n: 15, label: "궁금하신 점", type: "text" },
+  { id: "question", n: 16, label: "상담에서 가장 알고 싶은 점이나 기대하시는 도움", type: "text" },
+
+  // ── 예전 신청서에만 있던 문항 — 새 신청서에는 나오지 않고, 예전 신청서를 볼 때 답이 있을 때만 보인다 ──
+  { sec: "예전 신청서 항목", legacy: true },
+  { id: "relation", n: "참고", label: "아동과의 관계", type: "single", legacy: true, options: ["어머니", "아버지", "조부모"], etc: true },
+  { id: "grade", n: "참고", label: "학년·반", type: "line", legacy: true },
+  { id: "report", n: "참고", label: "검사 보고서를 가지고 계신가요?", type: "single", legacy: true, options: ["있음", "없음", "진행 중"] },
+  { id: "lEcho", n: "참고", label: "들은 말을 그대로 따라 하는 경우", type: "single", legacy: true, options: ["거의 없음", "가끔 있음", "자주 있음"] },
+  { id: "lAac", n: "참고", label: "말 외에 쓰는 방법", type: "multi", legacy: true, options: ["손짓·가리키기", "그림카드", "기기", "없음"], etc: true },
+  { id: "bWhen", n: "참고", label: "행동이 주로 나타나는 상황", type: "multi", legacy: true, options: [], etc: true },
+  { id: "bFreq", n: "참고", label: "행동 빈도", type: "single", legacy: true, options: [] },
+  { id: "bResponse", n: "참고", label: "그럴 때 보호자 대응", type: "text", legacy: true },
+  { id: "bGood", n: "참고", label: "잘 지내는 상황", type: "text", legacy: true },
+  { id: "sHard", n: "참고", label: "특별히 어려워하는 상황(또래)", type: "text", legacy: true },
+  { id: "aFeedback", n: "참고", label: "학교·유치원에서 들은 이야기", type: "text", legacy: true },
+  { id: "dMeal", n: "참고", label: "식사", type: "single", legacy: true, options: [] },
+  { id: "dPicky", n: "참고", label: "편식", type: "single", legacy: true, options: [] },
+  { id: "dSleep", n: "참고", label: "수면", type: "single", legacy: true, options: [] },
+  { id: "dHard", n: "참고", label: "특별히 힘든 부분(일상생활)", type: "text", legacy: true },
+  { id: "start", n: "참고", label: "시작 희망 시기", type: "single", legacy: true, options: [] },
 ];
+
+/* 학부모가 작성하는 화면에는 예전 문항(legacy)을 빼고 보여 준다 */
+const INQ_FORM_Q = INQ_Q.filter(function (q) {
+  return !q.legacy;
+});
 
 /* 분기 판정 — showIf 가 없으면 항상 보인다 */
 function isVisible(q, answers) {
@@ -756,6 +746,9 @@ function validateAnswers(qs, answers) {
    3. 공통 UI
    ══════════════════════════════════════════════════════════════════ */
 
+/* ★ [로고] 센터 로고 (통합본과 같은 그림) */
+const CENTER_LOGO = "data:image/png;base64,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";
+
 /* ★ [문구 복사] 링크를 보낼 때 안내 문구까지 한 번에 복사한다 */
 function msgCallName(full) {
   // '김하늘(형)'처럼 괄호가 있으면 괄호 앞까지만, 띄어쓰기는 지운다
@@ -772,9 +765,11 @@ function msgCallName(full) {
   return n;
 }
 function inquiryMessage(url) {
-  return "안녕하세요, 검단ABA언어행동연구소입니다.\n" +
-    "상담 전에 아이에 대해 미리 알고 싶어서 간단한 설문을 보내드립니다.\n" +
-    "아래 링크에서 작성해 주시면 상담 때 참고하겠습니다.\n" + url;
+  return "안녕하세요. 검단ABA언어행동연구소입니다.\n" +
+    "상담을 예약해 주셔서 감사합니다. 😊\n" +
+    "보다 깊이 있고 의미 있는 상담을 위해, 상담 전 아래 설문 작성을 부탁드립니다.\n" +
+    "작성해 주신 내용은 상담 전에 미리 살펴보고, 상담 시간에는 아이의 특성과 발달에 대해 함께 이야기 나누며 아이에게 필요한 지원과 방향을 찾아가고자 합니다.\n" +
+    "감사합니다. 💛\n" + url;
 }
 function reinMessage(childName, url) {
   return "어머님, 안녕하세요. 검단ABA언어행동연구소입니다.\n" +
@@ -949,7 +944,7 @@ function QuestionList(props) {
           n: q.n,
           label: q.label,
           note: q.note,
-          required: q.required,
+          required: q.required && !props.hideRequired,   // ★ 상담 신청서는 '필수' 표시를 숨김 (검사는 그대로)
           error: err,
           innerRef: setRef,
         };
@@ -1318,15 +1313,16 @@ function ReinSurvey(props) {
   return (
     <div className="wrap">
       <header className="hero">
-        <p className="hero-kicker">검단ABA언어행동연구소</p>
+        <img className="hero-logo" src={CENTER_LOGO} alt="검단ABA언어행동연구소" />
         <h1 className="hero-title">
           <span className="hero-name">{childName}</span> 아동이
           <br />
-          좋아하는 것을 알려 주세요
+          좋아하는 것을 알려 주세요!
         </h1>
         <p className="hero-body">
-          아이가 좋아하는 것을 수업에서 활용하기 위한 자료입니다. 약 5분 걸립니다.
-          정답은 없으니 편하게 답해 주세요.
+          아이가 좋아하는 음식, 놀이, 활동 등을 알아보고 수업에 활용하기 위한 설문입니다.
+          <br />
+          작성에는 약 5분 정도 소요됩니다. 정답은 없으니 평소 아이가 좋아하는 것과 즐거워하는 모습을 떠올리며 편하게 답해 주세요. 😊
         </p>
         {prevCount > 0 ? (
           <p className="hero-warn">
@@ -1363,7 +1359,7 @@ function ReinSurvey(props) {
 function InquiryForm() {
   const [phase, setPhase] = useState("form");
   const [sendError, setSendError] = useState("");
-  const form = useForm(INQ_Q);
+  const form = useForm(INQ_FORM_Q);
 
   function submit() {
     if (!form.validate()) return;
@@ -1393,17 +1389,22 @@ function InquiryForm() {
   return (
     <div className="wrap">
       <header className="hero">
-        <p className="hero-kicker">검단ABA언어행동연구소</p>
+        <img className="hero-logo" src={CENTER_LOGO} alt="검단ABA언어행동연구소" />
         <h1 className="hero-title">상담 전 사전 설문</h1>
         <p className="hero-body">
-          상담 예약이 완료되었습니다. 상담 전에 아이에 대해 미리 알아두면 좋을
-          내용을 여쭙습니다. 약 3분 걸립니다. 미리 작성해 주시면 상담 시간을 더
-          충실하게 쓸 수 있습니다.
+          안녕하세요. 검단ABA언어행동연구소입니다.
+          <br />
+          아이에게 더욱 알맞은 상담을 위해 간단한 사전 설문을 준비했습니다.
+          <br />
+          작성 시간은 약 3분 정도이며, 미리 작성해 주시면 아이의 특성과 필요를 이해하고 상담 시간에 더 깊이 있는 이야기를 나누는 데 도움이 됩니다.
+          <br />
+          감사합니다. 😊
         </p>
       </header>
 
       <QuestionList
-        questions={INQ_Q}
+        hideRequired
+        questions={INQ_FORM_Q}
         answers={form.answers}
         errors={form.errors}
         patch={form.patch}
@@ -3060,6 +3061,7 @@ const CSS = `
 .made-name { margin: 0 0 10px; font-family: 'Jua', sans-serif; font-size: 18px; color: var(--pkd); }
 .made-url { margin: 10px 0 12px; padding: 11px 13px; background: var(--pkl); border-radius: 10px;
   font-size: 13px; line-height: 1.6; word-break: break-all; color: var(--ink); }
+.hero-logo { display: block; width: 168px; max-width: 60%; height: auto; margin: 0 0 18px; }
 .made-btns { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .made-url.msg-box { white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
 .made-hint { margin: 12px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
