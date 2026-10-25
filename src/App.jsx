@@ -479,19 +479,14 @@ const REIN_Q = [
   { id: "token", n: 18, label: "스티커판·토큰판처럼 모아서 받는 보상을 써 본 적이 있나요?", type: "single",
     options: ["써 봤고 잘 맞았다", "써 봤지만 잘 안 맞았다", "써 본 적 없다"] },
 
-  { sec: "원하는 것이 있을 때" },
-  { id: "mand_how", n: 19, label: "아이가 원하는 것이 있을 때 주로 어떻게 알리나요?", type: "multi",
-    options: ["말로 한다", "가리킨다", "손을 끌고 간다", "그림·카드를 준다", "몸짓·수어", "직접 가져간다", "울거나 떼를 쓴다"],
-    etc: true },
-
   { sec: "싫어하는 것" },
-  { id: "dislike_sense", n: 20, label: "싫어하는 소리·촉감·환경", type: "multi",
+  { id: "dislike_sense", n: 19, label: "싫어하는 소리·촉감·환경", type: "multi",
     options: ["큰 소리", "특정 촉감", "밝은 빛", "사람 많은 곳", "낯선 사람"], etc: true },
-  { id: "dislike_task", n: 21, label: "싫어하는 활동·상황", type: "multi",
+  { id: "dislike_task", n: 20, label: "싫어하는 활동·상황", type: "multi",
     options: ["기다리기", "정리하기", "옷 갈아입기", "손 씻기·양치", "자리에 앉아 있기", "하던 것 멈추기"], etc: true },
 
   { sec: "그 밖에" },
-  { id: "extra", n: 22, label: "더 알려주고 싶은 것이 있으면 자유롭게 적어 주세요", type: "text" },
+  { id: "extra", n: 21, label: "더 알려주고 싶은 것이 있으면 자유롭게 적어 주세요", type: "text" },
 
   // ── 예전 설문에만 있던 문항 — 새 설문에는 나오지 않고, 예전 응답을 볼 때 답이 있을 때만 보인다 ──
   { sec: "예전 설문 항목", legacy: true },
@@ -499,6 +494,8 @@ const REIN_Q = [
     options: ["놀이터", "키즈카페", "마트", "공원", "차 안", "집 특정 공간"], etc: true },
   { id: "person", n: "참고", label: "좋아하는 사람", type: "multi", legacy: true,
     options: ["엄마", "아빠", "형제자매", "조부모", "또래 친구"], etc: true },
+  { id: "mand_how", n: "참고", label: "원하는 것이 있을 때 알리는 방법", type: "multi", legacy: true,
+    options: ["말로 한다", "가리킨다", "손을 끌고 간다", "그림·카드를 준다", "몸짓·수어", "직접 가져간다", "울거나 떼를 쓴다"], etc: true },
   { id: "dislike", n: "참고", label: "아이가 정말 싫어하는 것", type: "multi", legacy: true,
     options: ["큰 소리", "특정 촉감", "낯선 사람", "기다리기", "정리하기", "옷 갈아입기"], etc: true },
 ];
@@ -2014,6 +2011,7 @@ function InquirySheet(props) {
       .then(function (res) {
         setMadeUrl(props.linkUrl(res.token));
         setMadeName(nm);
+        if (props.ensureChildren) props.ensureChildren(true); // ★ 방금 통합본에 만든 아동이 명단에 바로 보이게 새로 불러옴
         setStatus("등록");
         setDupWarn("");
         setBusy(false);
@@ -2111,6 +2109,7 @@ function InquirySheet(props) {
       .then(function (token) {
         setMadeUrl(props.linkUrl(token));
         setMadeName(pickedChild.name || "");
+        if (props.ensureChildren) props.ensureChildren(true); // ★ 명단 새로 불러옴
         setStatus("등록");
         setBusy(false);
         setMsg("연결했습니다. 아래 링크를 학부모께 보내 주세요.");
@@ -2465,8 +2464,9 @@ function MakeTab(props) {
   const [made, setMade] = useState(null);
   const [err, setErr] = useState("");
 
+  // ★ 링크 만들기를 열 때마다 통합본 아동 명단을 새로 불러옴 (방금 등록한 아동도 바로 보이게)
   useEffect(function () {
-    props.ensureChildren();
+    props.ensureChildren(true);
   }, []);
 
   const filtered = useMemo(
