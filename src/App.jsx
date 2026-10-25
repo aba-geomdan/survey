@@ -1588,7 +1588,8 @@ function StaffConsole(props) {
     return window.location.origin + window.location.pathname + "?t=" + token;
   }
   function publicFormUrl() {
-    return window.location.origin + window.location.pathname + "?form=inquiry";
+    // ★ 카톡 미리보기에 '상담 신청서'로 뜨도록 전용 주소(inquiry/)로 보낸다. 열면 ?form=inquiry 로 넘어간다.
+    return window.location.origin + window.location.pathname.replace(/[^/]*$/, "") + "inquiry/";
   }
 
   function copy(text, tag) {
@@ -2879,7 +2880,10 @@ export default function App() {
       const p = new URLSearchParams(window.location.search);
       const t = p.get("t");
       if (t) return { kind: "rein", token: t };
-      if (p.get("form") === "inquiry") return { kind: "inquiry" };
+      if (p.get("form") === "inquiry") {
+        try { document.title = "상담 신청서 · 검단ABA언어행동연구소"; } catch (e) {}
+        return { kind: "inquiry" };
+      }
       return { kind: "staff" };
     } catch (e) {
       return { kind: "staff" };
