@@ -1434,6 +1434,7 @@ function Msg(props) {
    6. 로그인
    ══════════════════════════════════════════════════════════════════ */
 
+// ★ 브라우저에 저장된 이메일·비밀번호가 저절로 채워지지 않게 (autoComplete off / new-password)
 function LoginBox(props) {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
@@ -1457,7 +1458,7 @@ function LoginBox(props) {
   return (
     <div className="wrap">
       <header className="hero">
-        <p className="hero-kicker">검단ABA언어행동연구소</p>
+        <img className="hero-logo" src={CENTER_LOGO} alt="검단ABA언어행동연구소" />
         <h1 className="hero-title">설문 관리</h1>
       </header>
       <div className="q">
@@ -1465,7 +1466,11 @@ function LoginBox(props) {
           className="inp"
           placeholder="이메일"
           value={email}
-          autoComplete="username"
+          name="sv-staff-id"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           onChange={function (e) {
             setEmail(e.target.value);
           }}
@@ -1475,7 +1480,8 @@ function LoginBox(props) {
           type="password"
           placeholder="비밀번호"
           value={pw}
-          autoComplete="current-password"
+          name="sv-staff-pw"
+          autoComplete="new-password"
           onChange={function (e) {
             setPw(e.target.value);
           }}
