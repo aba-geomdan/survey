@@ -309,6 +309,55 @@ async function loadArchivedIds() {
   }
 }
 
+/* ★ 통합본 담당 따라가기
+   원장이 설문 앱을 열면 통합본 담당 치료사를 읽어 강화제 응답 배정을 맞춘다.
+   보관한 아동도 포함한다. 이름이 계정과 맞지 않는 아동은 건드리지 않는다.
+   서버 함수가 없거나 실패하면 아무것도 바꾸지 않는다. */
+async function loadChildOwners() {
+  try {
+    const rows = await rpc("rein_child_owners", {}, true);
+    return Array.isArray(rows) ? rows : null;
+  } catch (e) {
+    return null;
+  }
+}
+function normName(n) {
+  return String(n || "").replace(/\s+/g, "").replace(/(선생님|원장님|원장)$/, "");
+}
+async function syncAssignFromOwners(staff) {
+  const owners = await loadChildOwners();
+  if (!owners || !staff || staff.length === 0) return 0;
+  // 선생님 이름 → 계정 (같은 이름이 둘이면 쓰지 않는다)
+  const byName = {};
+  const dup = {};
+  staff.forEach(function (s) {
+    const k = normName(s.name);
+    if (!k) return;
+    if (byName[k]) dup[k] = true;
+    else byName[k] = s.id;
+  });
+  const ownerOf = {};
+  owners.forEach(function (o) {
+    if (!o || !o.id) return;
+    const k = normName(o.owner);
+    if (k && byName[k] && !dup[k]) ownerOf[o.id] = byName[k];
+  });
+  const surveys = await loadSurveys();
+  let changed = 0;
+  for (let i = 0; i < (surveys || []).length; i++) {
+    const sv = surveys[i];
+    const want = ownerOf[sv.child_id];
+    if (!want || sv.assigned_to === want) continue;
+    try {
+      await assignSurvey(sv.id, want);
+      changed++;
+    } catch (e) {
+      /* 한 건이 안 돼도 나머지는 계속한다 */
+    }
+  }
+  return changed;
+}
+
 async function createLink(child, assignedTo) {
   const r = await authedFetch(SUPABASE_URL + "/rest/v1/rein_links", {
     method: "POST",
@@ -1534,6 +1583,26 @@ function StaffConsole(props) {
 
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState("");
+  const [syncNote, setSyncNote] = useState("");   // ★ 통합본 담당에 맞춘 결과
+  const synced = useRef(false);
+
+  useEffect(
+    function () {
+      if (!admin || synced.current || staff.length === 0) return;
+      synced.current = true;
+      syncAssignFromOwners(staff)
+        .then(function (n) {
+          if (n > 0) {
+            setSyncNote("통합본 담당 치료사에 맞춰 강화제 설문 " + n + "건의 배정을 바꿨습니다.");
+            setSurveys(null);   // 바뀐 배정으로 목록을 새로 불러온다
+          }
+        })
+        .catch(function () {
+          /* 맞추지 못해도 화면은 그대로 쓴다 */
+        });
+    },
+    [admin, staff]
+  );
 
   function fetchStaff() {
     setStaffBusy(true);
@@ -1675,6 +1744,7 @@ function StaffConsole(props) {
       ) : null}
 
       {err ? <p className="q-errmsg">{err}</p> : null}
+      {syncNote ? <p className="pool-hint">{syncNote}</p> : null}
 
       {tab === "inq" ? (
         <InquiryTab
@@ -2842,7 +2912,8 @@ function SurveyTab(props) {
                 </div>
                 <p className="pool-hint">
                   배정된 선생님만 이 응답을 볼 수 있습니다. 다시 누르면 배정이
-                  풀립니다.
+                  풀립니다. 통합본에 담당 치료사가 있는 아동은 설문 앱을 열 때 그
+                  선생님으로 다시 맞춰지므로, 담당을 바꾸려면 통합본에서 바꿔 주세요.
                 </p>
               </div>
             ) : null}
