@@ -295,6 +295,20 @@ async function loadChildren() {
     });
 }
 
+/* ★ 보관 아동 id 읽기 — 통합본에서 보관한 아동을 '없는 아동'과 구분하려고 따로 받아 온다.
+   서버 함수가 없거나 실패하면 null 을 돌려주고, 그때는 예전처럼 표시한다. */
+async function loadArchivedIds() {
+  try {
+    const rows = await rpc("rein_archived_ids", {}, true);
+    if (!Array.isArray(rows)) return null;
+    return rows.map(function (x) {
+      return x && typeof x === "object" ? x.id : x;
+    }).filter(Boolean);
+  } catch (e) {
+    return null;
+  }
+}
+
 async function createLink(child, assignedTo) {
   const r = await authedFetch(SUPABASE_URL + "/rest/v1/rein_links", {
     method: "POST",
@@ -1511,6 +1525,7 @@ function StaffConsole(props) {
   const [staffErr, setStaffErr] = useState("");
   const [staffBusy, setStaffBusy] = useState(false);
   const [children, setChildren] = useState(null);
+  const [archivedIds, setArchivedIds] = useState([]);   // ★ 통합본에서 보관한 아동 id
   const [childErr, setChildErr] = useState("");
   const [loadingChildren, setLoadingChildren] = useState(false);
 
@@ -1577,6 +1592,9 @@ function StaffConsole(props) {
       .then(function (list) {
         setChildren(list);
         setLoadingChildren(false);
+        loadArchivedIds().then(function (ids) {
+          setArchivedIds(ids || []);
+        });
       })
       .catch(function (e) {
         setChildErr(e.message);
@@ -1669,6 +1687,7 @@ function StaffConsole(props) {
           refetchStaff={fetchStaff}
           staffName={staffName}
           childList={children}
+          archivedIds={archivedIds}
           ensureChildren={ensureChildren}
           childErr={childErr}
           loadingChildren={loadingChildren}
@@ -1732,6 +1751,7 @@ function StaffConsole(props) {
             surveys={surveys}
             setSurveys={setSurveys}
             childList={children}
+            archivedIds={archivedIds}
             ensureChildren={ensureChildren}
             admin={admin}
             staff={staff}
@@ -1872,7 +1892,9 @@ function InquiryTab(props) {
                       ? props.childList && !props.childList.some(function (c) {
                           return c.id === x.child_id;
                         })
-                        ? " · ⚠ 통합본에 없는 아동"
+                        ? (props.archivedIds || []).indexOf(x.child_id) !== -1
+                          ? " · 🗄️ 보관 아동"
+                          : " · ⚠ 통합본에 없는 아동"
                         : " · 아동 연결됨"
                       : ""}
                   </em>
@@ -1910,6 +1932,7 @@ function InquiryTab(props) {
           staffBusy={props.staffBusy}
           refetchStaff={props.refetchStaff}
           childList={props.childList}
+          archivedIds={props.archivedIds}
           childErr={props.childErr}
           loadingChildren={props.loadingChildren}
           ensureChildren={props.ensureChildren}
@@ -2235,6 +2258,15 @@ function InquirySheet(props) {
           {row.child_id ? (
             <div>
               {props.childList &&
+              !props.childList.some(function (c) {
+                return c.id === row.child_id;
+              }) &&
+              (props.archivedIds || []).indexOf(row.child_id) !== -1 ? (
+                <p className="pool-hint">
+                  통합본에서 보관한 아동입니다. 통합본에서 ↺ 복구하면 그대로 다시
+                  이어지니 [연결 해제]는 누르지 않으셔도 됩니다.
+                </p>
+              ) : props.childList &&
               !props.childList.some(function (c) {
                 return c.id === row.child_id;
               }) ? (
@@ -2659,8 +2691,14 @@ function SurveyTab(props) {
     if (props.admin) props.ensureChildren();
   }, []);
 
+  // ★ 보관한 아동은 '없는 아동'이 아니다
+  function isArchived(childId) {
+    return (props.archivedIds || []).indexOf(childId) !== -1;
+  }
+
   function isOrphan(childId) {
     if (!props.childList) return false;   // 목록을 못 불러왔으면 표시하지 않는다
+    if (isArchived(childId)) return false;
     return !props.childList.some(function (c) {
       return c.id === childId;
     });
@@ -2729,6 +2767,7 @@ function SurveyTab(props) {
                       : " · 미배정"
                     : ""}
                   {props.admin && isOrphan(s.child_id) ? " · ⚠ 통합본에 없는 아동" : ""}
+                  {props.admin && isArchived(s.child_id) ? " · 🗄️ 보관 아동" : ""}
                 </em>
               </span>
               <button
@@ -2806,6 +2845,13 @@ function SurveyTab(props) {
                   풀립니다.
                 </p>
               </div>
+            ) : null}
+
+            {props.admin && isArchived(open.child_id) ? (
+              <p className="pool-hint">
+                통합본에서 보관한 아동입니다. 응답은 그대로 두시면 되고, 통합본에서
+                ↺ 복구하면 아동 카드에 다시 나타납니다.
+              </p>
             ) : null}
 
             {props.admin && isOrphan(open.child_id) ? (
