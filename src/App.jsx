@@ -190,6 +190,9 @@ async function signIn(email, password) {
     );
   }
   saveSession(data);
+  try {
+    sessionStorage.removeItem("rein-handoff-used");   // 직접 로그인했으면 넘겨받기 안내는 지운다
+  } catch (e) {}
   return data;
 }
 
@@ -1575,6 +1578,7 @@ function LoginBox(props) {
       <button className="submit" onClick={go} disabled={busy}>
         {busy ? "확인 중…" : "로그인"}
       </button>
+      {schedNote() ? <p className="foot">{schedNote()}</p> : null}
     </div>
   );
 }
@@ -3270,22 +3274,44 @@ function Detail(props) {
 /* ★ 시간표 앱 [설문 현황 열기]로 넘겨받는 로그인
    시간표 앱이 이 창을 열면서 1시간짜리 출입증을 넣어 둔다. 있으면 로그인 화면 없이 들어간다.
    출입증이 끝나면(약 1시간) 평소처럼 로그인 화면이 나온다. 시간표 앱 로그인에는 영향이 없다. */
+const SCHED_USED_KEY = "rein-handoff-used";   // 넘겨받은 출입증으로 들어간 적이 있음 (문제 찾기용)
+let schedNoteText = "";
+function schedNote() {
+  if (schedNoteText) return schedNoteText;
+  try {
+    if (sessionStorage.getItem(SCHED_USED_KEY)) {
+      return "시간표에서 넘겨받기: 출입증이 만료되었거나 받아들여지지 않았습니다. 시간표 앱에서 다시 눌러 주세요.";
+    }
+  } catch (e) {}
+  return "";
+}
 function takeSchedHandoff() {
+  let opened = false;
+  try {
+    opened = !!window.opener;
+  } catch (e) {}
   try {
     const raw = sessionStorage.getItem("rein-handoff");
-    if (!raw) return;
+    if (!raw) {
+      if (opened && !getSession()) schedNoteText = "시간표에서 넘겨받기: 창은 열렸지만 출입증이 오지 않았습니다.";
+      return;
+    }
     sessionStorage.removeItem("rein-handoff");
     const h = JSON.parse(raw);
     const nowSec = Math.floor(Date.now() / 1000);
-    if (!h || !h.access_token || !h.expires_at || h.expires_at <= nowSec + 60) return;
+    if (!h || !h.access_token || !h.expires_at || h.expires_at <= nowSec + 60) {
+      schedNoteText = "시간표에서 넘겨받기: 받은 출입증이 이미 만료되었습니다.";
+      return;
+    }
     saveSession({
       access_token: h.access_token,
       expires_at: h.expires_at,
       token_type: "bearer",
       user: { id: h.user_id || "" },
     });
+    sessionStorage.setItem(SCHED_USED_KEY, "1");
   } catch (e) {
-    /* 넘겨받지 못하면 평소처럼 로그인 화면 */
+    schedNoteText = "시간표에서 넘겨받기: 오류 (" + ((e && e.message) || e) + ")";
   }
 }
 
