@@ -487,6 +487,24 @@ async function patchInquiry(id, changes) {
   return rows && rows[0];
 }
 
+/* ── 설문 현황판 (원장·실장) ── */
+async function loadBoard() {
+  return await rpc("survey_board", {}, true);
+}
+/* 열어 본 설문은 '새로 들어옴'에서 '확인 끝남'으로 — 실패해도 화면은 그대로 쓴다 */
+function markChecked(kind, id) {
+  return rpc("survey_mark_checked", { p_kind: kind, p_id: id }, true).catch(function () {
+    return false;
+  });
+}
+/* 메일·시간표 앱이 이 주소로 연결되도록 설문 앱 주소를 적어 둔다 */
+function saveAppUrl() {
+  const url = window.location.origin + window.location.pathname;
+  return rpc("survey_set_app_url", { p_url: url }, true).catch(function () {
+    return false;
+  });
+}
+
 /* ══════════════════════════════════════════════════════════════════
    2. 문항 정의
    ══════════════════════════════════════════════════════════════════ */
@@ -1567,7 +1585,8 @@ function LoginBox(props) {
 
 function StaffConsole(props) {
   const admin = props.admin;
-  const [tab, setTab] = useState(admin ? "inq" : "rein");
+  const [tab, setTab] = useState(admin ? "board" : "rein");
+  const [focus, setFocus] = useState(null);   // ★ 현황판에서 [답변 보기]로 넘어갈 때 바로 열 설문 { kind, id }
   const [showMake, setShowMake] = useState(false);   // 강화제 탭의 [아동에게 링크 보내기] 펼침
 
   const [staff, setStaff] = useState([]);
@@ -1626,6 +1645,7 @@ function StaffConsole(props) {
     function () {
       if (!admin) return;
       fetchStaff();
+      saveAppUrl();
     },
     [admin]
   );
@@ -1703,11 +1723,20 @@ function StaffConsole(props) {
     [staff]
   );
 
-  /* 설문 두 개 = 탭 두 개. 원장·선생님 화면이 같은 이름을 쓴다. */
-  const tabs = [
+  /* 설문 두 개 = 탭 두 개. 원장·선생님 화면이 같은 이름을 쓴다.
+     원장(관리자)에게는 맨 앞에 [설문 현황]이 붙는다. */
+  const tabs = (admin ? [["board", "설문 현황"]] : []).concat([
     ["inq", "상담 신청서"],
     ["rein", "강화제 설문"],
-  ];
+  ]);
+
+  /* 현황판 [답변 보기] — 해당 탭으로 옮기고 그 설문을 바로 연다 */
+  function openFromBoard(kind, id) {
+    setFocus({ kind: kind, id: id });
+    if (kind === "inq") setInquiries(null);   // 새로 들어온 것까지 보이게 다시 불러온다
+    else setSurveys(null);
+    setTab(kind);
+  }
 
   return (
     <div className="wrap">
@@ -1746,6 +1775,17 @@ function StaffConsole(props) {
       {err ? <p className="q-errmsg">{err}</p> : null}
       {syncNote ? <p className="pool-hint">{syncNote}</p> : null}
 
+      {tab === "board" && admin ? (
+        <BoardTab
+          staffName={staffName}
+          linkUrl={linkUrl}
+          publicUrl={publicFormUrl()}
+          copy={copy}
+          copied={copied}
+          onOpen={openFromBoard}
+        />
+      ) : null}
+
       {tab === "inq" ? (
         <InquiryTab
           admin={admin}
@@ -1766,6 +1806,10 @@ function StaffConsole(props) {
           copy={copy}
           copied={copied}
           onLinkMade={function () {}}
+          focusId={focus && focus.kind === "inq" ? focus.id : null}
+          onFocused={function () {
+            setFocus(null);
+          }}
         />
       ) : null}
 
@@ -1829,9 +1873,213 @@ function StaffConsole(props) {
             onAssigned={function () {
               setSurveys(null);
             }}
+            focusId={focus && focus.kind === "rein" ? focus.id : null}
+            onFocused={function () {
+              setFocus(null);
+            }}
           />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/* ── 7-0. 설문 현황 (원장·실장 첫 화면) ──────────────────────────────
+   보낸 것 / 들어온 것을 한 줄씩 보여 준다.
+     새로 들어옴 : 학부모가 냈는데 아직 아무도 안 열어 봄
+     기다리는 중 : 강화제 링크를 보냈는데 아직 답이 없음 (7일 넘으면 빨간색)
+     확인 끝남   : 열어 본 것 (최근 30일)
+   상담 신청서는 모두 같은 링크를 쓰므로 '기다리는 중'이 없다. */
+
+const BOARD_STATE = {
+  new: { label: "새로 들어옴", cls: "badge-fresh" },
+  wait: { label: "기다리는 중", cls: "badge-wait" },
+  old: { label: "7일 넘음", cls: "badge-old" },
+  done: { label: "확인 끝남", cls: "badge-off" },
+};
+
+function boardWhen(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const hm = d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const today = new Date();
+  const yest = new Date(Date.now() - 86400000);
+  if (d.toDateString() === today.toDateString()) return "오늘 " + hm;
+  if (d.toDateString() === yest.toDateString()) return "어제 " + hm;
+  return (d.getMonth() + 1) + "/" + d.getDate();
+}
+
+function BoardTab(props) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [busyId, setBusyId] = useState("");
+
+  function load() {
+    setErr("");
+    loadBoard()
+      .then(function (d) {
+        setData(d || { rows: [] });
+      })
+      .catch(function (e) {
+        setErr((e && e.message) || "현황을 불러오지 못했습니다.");
+        setData({ rows: [] });
+      });
+  }
+
+  useEffect(function () {
+    load();
+    // 켜 둔 채로 있어도 1분마다 새로 들어온 것을 반영한다
+    const t = setInterval(function () {
+      if (document.visibilityState === "visible") load();
+    }, 60000);
+    return function () {
+      clearInterval(t);
+    };
+  }, []);
+
+  const rows = (data && data.rows) || [];
+  const count = { new: 0, wait: 0, old: 0, done: 0 };
+  rows.forEach(function (r) {
+    if (count[r.state] !== undefined) count[r.state]++;
+  });
+  const shown = rows.filter(function (r) {
+    return filter === "all" || r.kind === filter;
+  });
+
+  function view(r) {
+    setBusyId(r.id);
+    const p = r.state === "new" ? markChecked(r.kind, r.id) : Promise.resolve(true);
+    p.then(function () {
+      setBusyId("");
+      props.onOpen(r.kind, r.id);
+    });
+  }
+
+  return (
+    <div>
+      <div className="pub board-top">
+        <p className="pub-label inline">상담 신청서 보낼 때</p>
+        <button
+          className="submit sm"
+          onClick={function () {
+            props.copy(inquiryMessage(props.publicUrl), "board-pub");
+          }}
+        >
+          {props.copied === "board-pub" ? "복사했습니다" : "문구와 주소 복사"}
+        </button>
+      </div>
+
+      {data && data.mail_error ? (
+        <div className="mail-err">
+          <b>알림 메일이 안 나가고 있습니다.</b>
+          <span>
+            네이버 메일 → 환경설정 → POP3/IMAP 설정에서 "POP3/SMTP 사용"이 "사용함"인지 확인해 주세요.
+            {data.mail_error_at ? " (" + boardWhen(data.mail_error_at) + ")" : ""}
+          </span>
+          <em>{data.mail_error}</em>
+        </div>
+      ) : null}
+
+      {err ? <p className="q-errmsg">{err}</p> : null}
+
+      <div className="board-metrics">
+        <div className="metric">
+          <span>새로 들어옴</span>
+          <b className="m-fresh">{count.new}</b>
+        </div>
+        <div className="metric">
+          <span>기다리는 중</span>
+          <b>{count.wait}</b>
+        </div>
+        <div className="metric">
+          <span>7일 넘게 안 옴</span>
+          <b className="m-old">{count.old}</b>
+        </div>
+        <div className="metric">
+          <span>확인 끝남</span>
+          <b className="m-done">{count.done}</b>
+        </div>
+      </div>
+
+      <div className="chips filter board-filter">
+        {[
+          ["all", "전체"],
+          ["rein", "강화제 설문"],
+          ["inq", "상담 신청서"],
+        ].map(function (f) {
+          return (
+            <button
+              key={f[0]}
+              className={"chip" + (filter === f[0] ? " chip-on" : "")}
+              onClick={function () {
+                setFilter(f[0]);
+              }}
+            >
+              {f[1]}
+            </button>
+          );
+        })}
+        <button className="ghost board-reload" onClick={load}>
+          새로고침
+        </button>
+      </div>
+
+      {data === null ? (
+        <p className="notice">불러오는 중입니다…</p>
+      ) : shown.length === 0 ? (
+        <p className="notice">표시할 설문이 없습니다.</p>
+      ) : (
+        <ul className="rows">
+          {shown.map(function (r) {
+            const st = BOARD_STATE[r.state] || BOARD_STATE.done;
+            const kindLabel = r.kind === "rein" ? "강화제 설문" : "상담 신청서";
+            const who = r.kind === "rein"
+              ? r.assigned_to
+                ? " · 담당 " + (props.staffName[r.assigned_to] || "배정됨")
+                : " · 미배정"
+              : "";
+            const waiting = r.state === "wait" || r.state === "old";
+            const when = waiting
+              ? boardWhen(r.at) + " 보냄 · " + (waitingDays(r.at) || 0) + "일째"
+              : boardWhen(r.at) + " 도착";
+            return (
+              <li className={"row" + (r.state === "done" ? " row-dim" : "")} key={r.kind + r.id}>
+                <span className="board-main">
+                  <em className={"badge " + st.cls}>{st.label}</em>
+                  <span>
+                    <b>{r.child_name}</b>
+                    <em className="row-sub">
+                      {kindLabel}
+                      {who} · {when}
+                    </em>
+                  </span>
+                </span>
+                {waiting ? (
+                  <button
+                    className="ghost"
+                    onClick={function () {
+                      props.copy(reinMessage(r.child_name, props.linkUrl(r.token)), "re-" + r.id);
+                    }}
+                  >
+                    {props.copied === "re-" + r.id ? "복사했습니다" : "다시 보낼 문구"}
+                  </button>
+                ) : (
+                  <button
+                    className="submit sm"
+                    disabled={busyId === r.id}
+                    onClick={function () {
+                      view(r);
+                    }}
+                  >
+                    답변 보기
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -1845,6 +2093,19 @@ function InquiryTab(props) {
   useEffect(function () {
     if (props.admin) props.ensureChildren();
   }, []);
+
+  // ★ 현황판에서 넘어왔으면 그 신청서를 바로 연다
+  useEffect(
+    function () {
+      if (!props.focusId || !props.inquiries) return;
+      const hit = props.inquiries.find(function (x) {
+        return x.id === props.focusId;
+      });
+      if (hit) setOpen(hit);
+      if (props.onFocused) props.onFocused();
+    },
+    [props.focusId, props.inquiries]
+  );
 
   const list = props.inquiries;
   const shown = useMemo(
@@ -1976,6 +2237,7 @@ function InquiryTab(props) {
                     onClick={function () {
                       setOpen(x);
                       props.ensureChildren();
+                      if (props.admin) markChecked("inq", x.id);
                     }}
                   >
                     보기
@@ -2761,6 +3023,19 @@ function SurveyTab(props) {
     if (props.admin) props.ensureChildren();
   }, []);
 
+  // ★ 현황판에서 넘어왔으면 그 응답을 바로 연다
+  useEffect(
+    function () {
+      if (!props.focusId || !list) return;
+      const hit = list.find(function (x) {
+        return x.id === props.focusId;
+      });
+      if (hit) setOpen(hit);
+      if (props.onFocused) props.onFocused();
+    },
+    [props.focusId, list]
+  );
+
   // ★ 보관한 아동은 '없는 아동'이 아니다
   function isArchived(childId) {
     return (props.archivedIds || []).indexOf(childId) !== -1;
@@ -2844,6 +3119,7 @@ function SurveyTab(props) {
                 className="submit sm"
                 onClick={function () {
                   setOpen(s);
+                  if (props.admin) markChecked("rein", s.id);
                 }}
               >
                 보기
@@ -3177,6 +3453,29 @@ const CSS = `
 .badge-new { background: var(--pkd); color: #fff; }
 .badge-off { background: #EFEDEE; color: var(--muted); }
 .badge-wait { background: #FFF1DC; color: #9A6410; }
+.badge-fresh { background: #EAF3DE; color: #3B6D11; }
+.badge-old { background: #FCEBEB; color: #A32D2D; }
+
+.board-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.mail-err { margin-top: 14px; padding: 12px 14px; background: #FCEBEB; border: 1px solid #F09595;
+  border-radius: 10px; font-size: 14px; line-height: 1.6; color: #791F1F; }
+.mail-err b { display: block; }
+.mail-err em { display: block; font-style: normal; font-size: 12px; color: #A32D2D; margin-top: 4px; word-break: break-all; }
+.board-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.metric { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.metric span { display: block; font-size: 12px; color: var(--muted); }
+.metric b { display: block; font-size: 22px; margin-top: 2px; }
+.metric .m-fresh { color: #3B6D11; }
+.metric .m-old { color: #A32D2D; }
+.metric .m-done { color: var(--muted); }
+.board-filter { align-items: center; }
+.board-reload { margin-left: auto; }
+.board-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.board-main .badge { flex: none; }
+.row-dim { background: #FCFBFB; }
+@media (max-width: 520px) {
+  .board-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 .pub { background: var(--paper); border: 1px solid var(--pk); border-radius: 14px;
   padding: 16px 15px; margin-top: 16px; }
