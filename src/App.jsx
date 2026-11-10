@@ -3267,6 +3267,28 @@ function Detail(props) {
    8. 진입점
    ══════════════════════════════════════════════════════════════════ */
 
+/* ★ 시간표 앱 [설문 현황 열기]로 넘겨받는 로그인
+   시간표 앱이 이 창을 열면서 1시간짜리 출입증을 넣어 둔다. 있으면 로그인 화면 없이 들어간다.
+   출입증이 끝나면(약 1시간) 평소처럼 로그인 화면이 나온다. 시간표 앱 로그인에는 영향이 없다. */
+function takeSchedHandoff() {
+  try {
+    const raw = sessionStorage.getItem("rein-handoff");
+    if (!raw) return;
+    sessionStorage.removeItem("rein-handoff");
+    const h = JSON.parse(raw);
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (!h || !h.access_token || !h.expires_at || h.expires_at <= nowSec + 60) return;
+    saveSession({
+      access_token: h.access_token,
+      expires_at: h.expires_at,
+      token_type: "bearer",
+      user: { id: h.user_id || "" },
+    });
+  } catch (e) {
+    /* 넘겨받지 못하면 평소처럼 로그인 화면 */
+  }
+}
+
 export default function App() {
   const route = useMemo(function () {
     try {
@@ -3284,6 +3306,7 @@ export default function App() {
   }, []);
 
   const [loggedIn, setLoggedIn] = useState(function () {
+    takeSchedHandoff();
     return !!getSession();
   });
   const [admin, setAdmin] = useState(null);
