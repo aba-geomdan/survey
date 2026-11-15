@@ -138,12 +138,13 @@ async function staffHeaders() {
    그래도 안 되면 세션을 비우고 로그인 화면으로 돌린다. */
 async function forceRefresh() {
   const s = getSession();
-  if (!s || !s.refresh_token) return null;
+  if (!s || !s.refresh_token) return await askSchedForPass();
   return await refreshSession(s.refresh_token);
 }
 
 async function authedFetch(url, opts, retried) {
   const base = await staffHeaders();
+  const usedToken = (getSession() || {}).access_token || "";
   const o = opts || {};
   const r = await fetch(url, {
     method: o.method || "GET",
@@ -155,6 +156,14 @@ async function authedFetch(url, opts, retried) {
       const fresh = await forceRefresh();
       if (fresh) return authedFetch(url, opts, true);
     }
+    // 그사이 시간표가 새 출입증을 넣어 줬다면 지우지 말고 그것으로 한 번 더
+    const cur = getSession();
+    if (retried !== 2 && cur && cur.access_token && cur.access_token !== usedToken &&
+        cur.expires_at > Math.floor(Date.now() / 1000) + 60) {
+      return authedFetch(url, opts, 2);
+    }
+    // 거절된 출입증은 기억해 둠 → 같은 것을 다시 받아 새로고침을 되풀이하지 않게
+    try { if (usedToken) sessionStorage.setItem("rein-bad-pass", usedToken); } catch (e) {}
     saveSession(null);
     try {
       window.location.reload();
@@ -225,13 +234,34 @@ async function inquirySubmit(answers) {
 }
 
 /* ── 선생님 ── */
-async function checkAdmin() {
-  try {
-    return (await rpc("is_admin", {}, true)) === true;
-  } catch (e) {
-    return false;
+// 원장님 계정인지 확인: true / false / null(확인 실패)
+async function adminState() {
+  // 인터넷이 잠깐 끊긴 경우를 생각해 2초 간격으로 세 번까지 확인
+  for (let i = 0; i < 3; i++) {
+    try {
+      return (await rpc("is_admin", {}, true)) === true;
+    } catch (e) {
+      if (!getSession()) return null;
+      await new Promise(function (r) { setTimeout(r, 2000); });
+    }
   }
+  return null;
 }
+// 이 창의 로그인만 끝냄 (같은 계정의 통합본·시간표 로그인은 그대로)
+function endLoginHere() {
+  const s = getSession();
+  if (s && s.access_token && s.refresh_token) {
+    try {
+      fetch(SUPABASE_URL + "/auth/v1/logout?scope=local", {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + s.access_token },
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  saveSession(null);
+}
+const ADMIN_ONLY_MSG = "설문 관리는 원장님 계정만 로그인할 수 있습니다.";
+let loginNote = "";
 async function staffList() {
   return await rpc("rein_staff_list", {}, true);
 }
@@ -1523,15 +1553,25 @@ function LoginBox(props) {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState(loginNote);
 
   function go() {
     setBusy(true);
     setErr("");
     signIn(email.trim(), pw)
       .then(function () {
+        return adminState();
+      })
+      .then(function (ok) {
         setBusy(false);
-        props.onDone();
+        if (ok === true) {
+          loginNote = "";
+          props.onDone();
+          return;
+        }
+        // 원장님 계정이 아니면 바로 로그인을 끝냄 (선생님은 설문 관리에 들어오지 않음)
+        endLoginHere();
+        setErr(ok === false ? ADMIN_ONLY_MSG : "원장님 계정인지 확인하지 못했습니다. 잠시 뒤 다시 눌러 주세요.");
       })
       .catch(function (e) {
         setBusy(false);
@@ -1744,6 +1784,8 @@ function StaffConsole(props) {
 
   return (
     <div className="wrap">
+      {/* 시간표 앱 '설문' 메뉴 안에 띄워졌을 때는 맨 위 로고·로그아웃을 숨김 (로그인·로그아웃은 시간표가 맡음) */}
+      {IN_SCHED ? null : (
       <header className="hero hero-staff">
         <img className="hero-logo" src={CENTER_LOGO} alt="검단ABA언어행동연구소" />
         <h1 className="hero-title">설문 관리</h1>
@@ -1757,6 +1799,7 @@ function StaffConsole(props) {
           로그아웃
         </button>
       </header>
+      )}
 
       {tabs.length > 1 ? (
         <nav className="tabs">
@@ -3276,6 +3319,63 @@ function Detail(props) {
    출입증이 끝나면(약 1시간) 평소처럼 로그인 화면이 나온다. 시간표 앱 로그인에는 영향이 없다. */
 const SCHED_USED_KEY = "rein-handoff-used";   // 넘겨받은 출입증으로 들어간 적이 있음 (문제 찾기용)
 let schedNoteText = "";
+// 시간표 앱 안(틀 안)에 띄워졌는지
+const IN_SCHED = (function () {
+  try {
+    return window.self !== window.top;
+  } catch (e) {
+    return true;
+  }
+})();
+// 시간표 앱이 수시로 건네주는 새 출입증을 받아 로그인을 이어 감 (같은 주소에서 온 것만)
+if (IN_SCHED) {
+  try {
+    window.addEventListener("message", function (e) {
+      if (e.origin !== window.location.origin) return;
+      const d = e.data;
+      if (!d || d.type !== "rein-pass" || !d.pass || !d.pass.access_token) return;
+      if (!d.pass.expires_at || d.pass.expires_at <= Math.floor(Date.now() / 1000) + 60) return;
+      try { if (sessionStorage.getItem("rein-bad-pass") === d.pass.access_token) return; } catch (e3) {}
+      let had = getSession();
+      try { if (!had && sessionStorage.getItem("rein-handoff")) had = true; } catch (e4) {}
+      saveSession({
+        access_token: d.pass.access_token,
+        expires_at: d.pass.expires_at,
+        token_type: "bearer",
+        user: { id: d.pass.user_id || "" },
+      });
+      // 이미 로그인 화면으로 넘어가 있었다면 새 출입증으로 바로 다시 엶
+      if (!had) {
+        try { window.location.reload(); } catch (e2) {}
+      }
+    });
+  } catch (e) {}
+}
+// 시간표 안에서 출입증이 끝났을 때: 시간표 앱에 새 출입증을 달라고 하고 잠깐(최대 15초) 기다림
+function askSchedForPass() {
+  return new Promise(function (resolve) {
+    if (!IN_SCHED) return resolve(null);
+    const before = (getSession() || {}).access_token || "";
+    try {
+      window.parent.postMessage({ type: "rein-need-pass" }, window.location.origin);
+    } catch (e) {
+      return resolve(null);
+    }
+    let n = 0;
+    const t = setInterval(function () {
+      n++;
+      const s = getSession();
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (s && s.access_token && s.access_token !== before && s.expires_at > nowSec + 60) {
+        clearInterval(t);
+        resolve(s);
+      } else if (n >= 75) {
+        clearInterval(t);
+        resolve(null);
+      }
+    }, 200);
+  });
+}
 function schedNote() {
   if (schedNoteText) return schedNoteText;
   try {
@@ -3336,13 +3436,28 @@ export default function App() {
     return !!getSession();
   });
   const [admin, setAdmin] = useState(null);
+  // 시간표 안에서 열렸는데 로그인이 없으면 시간표에 출입증을 달라고 함 (받으면 저절로 다시 열림)
+  useEffect(function () {
+    if (route.kind === "staff" && IN_SCHED && !loggedIn) {
+      try { window.parent.postMessage({ type: "rein-need-pass" }, window.location.origin); } catch (e) {}
+    }
+  }, []);
 
   useEffect(
     function () {
       if (route.kind !== "staff" || !loggedIn) return;
       let alive = true;
-      checkAdmin().then(function (ok) {
-        if (alive) setAdmin(ok);
+      adminState().then(function (ok) {
+        if (!alive) return;
+        if (ok === true) {
+          setAdmin(true);
+          return;
+        }
+        // 원장님 계정이 아니거나 확인이 안 되면 로그인을 끝내고 로그인 화면으로
+        loginNote = ok === false ? ADMIN_ONLY_MSG : "원장님 계정인지 확인하지 못했습니다. 다시 로그인해 주세요.";
+        endLoginHere();
+        setAdmin(null);
+        setLoggedIn(false);
       });
       return function () {
         alive = false;
