@@ -65,6 +65,37 @@ function waitingText(iso) {
   return Math.floor(d / 30) + "개월째";
 }
 
+/* ★ 상담 날짜 — 상담예정일 때 날짜·시간을 적어 둔다 (시간표 앱 알림·칸에 쓰임) */
+const CONSULT_WD = ["일", "월", "화", "수", "목", "금", "토"];
+const CONSULT_TIMES = (function () {
+  const out = [];
+  for (let h = 9; h <= 20; h++) {
+    for (let m = 0; m < 60; m += 10) out.push(String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0"));
+  }
+  return out;
+})();
+function consultParts(iso) {
+  if (!iso) return { d: "", t: "" };
+  const x = new Date(iso);
+  if (isNaN(x.getTime())) return { d: "", t: "" };
+  const p2 = function (n) { return String(n).padStart(2, "0"); };
+  return {
+    d: x.getFullYear() + "-" + p2(x.getMonth() + 1) + "-" + p2(x.getDate()),
+    t: p2(x.getHours()) + ":" + p2(x.getMinutes()),
+  };
+}
+function consultIso(d, t) {
+  if (!d || !t) return null;
+  const x = new Date(d + "T" + t + ":00");
+  return isNaN(x.getTime()) ? null : x.toISOString();
+}
+function consultText(iso) {
+  const c = consultParts(iso);
+  if (!c.d) return "";
+  const x = new Date(iso);
+  return "상담 " + (x.getMonth() + 1) + "/" + x.getDate() + "(" + CONSULT_WD[x.getDay()] + ") " + c.t;
+}
+
 /* ══════════════════════════════════════════════════════════════════
    1. Supabase 접근
    ══════════════════════════════════════════════════════════════════ */
@@ -1629,8 +1660,18 @@ function LoginBox(props) {
 
 function StaffConsole(props) {
   const admin = props.admin;
-  const [tab, setTab] = useState(admin ? "board" : "rein");
-  const [focus, setFocus] = useState(null);   // ★ 현황판에서 [답변 보기]로 넘어갈 때 바로 열 설문 { kind, id }
+  // ★ 시간표 앱 상담 알림에서 열면 주소에 ?open=inq:<id> 가 붙어 온다 → 그 상담 신청서를 바로 연다
+  const openArg = useMemo(function () {
+    try {
+      const v = new URLSearchParams(window.location.search).get("open") || "";
+      const m = /^inq:(.+)$/.exec(v);
+      return m && admin ? { kind: "inq", id: m[1] } : null;
+    } catch (e) {
+      return null;
+    }
+  }, []);
+  const [tab, setTab] = useState(openArg ? "inq" : admin ? "board" : "rein");
+  const [focus, setFocus] = useState(openArg);   // ★ 현황판에서 [답변 보기]로 넘어갈 때 바로 열 설문 { kind, id }
   const [showMake, setShowMake] = useState(false);   // 강화제 탭의 [아동에게 링크 보내기] 펼침
 
   const [staff, setStaff] = useState([]);
@@ -2146,7 +2187,7 @@ function InquiryTab(props) {
     function () {
       if (!props.focusId || !props.inquiries) return;
       const hit = props.inquiries.find(function (x) {
-        return x.id === props.focusId;
+        return String(x.id) === String(props.focusId);
       });
       if (hit) setOpen(hit);
       if (props.onFocused) props.onFocused();
@@ -2266,6 +2307,9 @@ function InquiryTab(props) {
                   ) : null}
                   <em className="row-sub">
                     {new Date(x.created_at).toLocaleDateString("ko-KR")} · {x.phone}
+                    {x.status === "상담예정" && x.consult_at ? (
+                      <b className="consult-when"> · {consultText(x.consult_at)}</b>
+                    ) : null}
                     {x.child_id
                       ? props.childList && !props.childList.some(function (c) {
                           return c.id === x.child_id;
@@ -2334,7 +2378,9 @@ function InquirySheet(props) {
   /* 자동 저장 — 타이핑을 멈추면 알아서 저장한다. 저장 버튼이 따로 없다. */
   const [saveState, setSaveState] = useState("");   // "" | saving | saved | error
   const saveTimer = useRef(null);
-  const latest = useRef({ memo: row.memo || "", status: row.status });
+  const latest = useRef({ memo: row.memo || "", status: row.status, consult_at: row.consult_at || null });
+  const [consultD, setConsultD] = useState(consultParts(row.consult_at).d);
+  const [consultT, setConsultT] = useState(consultParts(row.consult_at).t);
 
   useEffect(function () {
     return function () {
@@ -2348,6 +2394,7 @@ function InquirySheet(props) {
     patchInquiry(row.id, {
       memo: latest.current.memo,
       status: latest.current.status,
+      consult_at: latest.current.consult_at,
     })
       .then(function (updated) {
         setSaveState("saved");
@@ -2374,6 +2421,15 @@ function InquirySheet(props) {
     latest.current.status = v;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     pushSave({ status: v });
+  }
+
+  /* 상담 날짜 — 날짜와 시간이 둘 다 있을 때(또는 둘 다 지웠을 때)만 저장한다 */
+  function onConsultPick(d, t) {
+    setConsultD(d);
+    setConsultT(t);
+    if ((d && !t) || (!d && t)) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    pushSave({ consult_at: consultIso(d, t) });
   }
   const [childQuery, setChildQuery] = useState("");
   const [pickedChild, setPickedChild] = useState(null);
@@ -2584,6 +2640,63 @@ function InquirySheet(props) {
               );
             })}
           </div>
+          {status === "상담예정" ? (
+            <div className="consult-row">
+              <span className="pub-label inline">상담 날짜</span>
+              {props.admin ? (
+                <>
+                  <input
+                    type="date"
+                    className="inp consult-inp"
+                    value={consultD}
+                    onChange={function (e) {
+                      onConsultPick(e.target.value, consultT);
+                    }}
+                  />
+                  <select
+                    className="inp consult-inp"
+                    value={consultT}
+                    onChange={function (e) {
+                      onConsultPick(consultD, e.target.value);
+                    }}
+                  >
+                    <option value="">시간</option>
+                    {CONSULT_TIMES.concat(
+                      consultT && CONSULT_TIMES.indexOf(consultT) === -1 ? [consultT] : []
+                    ).map(function (t) {
+                      return (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {consultD || consultT ? (
+                    <button
+                      type="button"
+                      className="consult-clear"
+                      onClick={function () {
+                        onConsultPick("", "");
+                      }}
+                    >
+                      지우기
+                    </button>
+                  ) : null}
+                  <span className="consult-hint">
+                    {consultD && !consultT
+                      ? "시간도 골라 주세요"
+                      : !consultD && consultT
+                      ? "날짜도 골라 주세요"
+                      : consultD && consultT
+                      ? "하루 전·당일에 시간표 앱에 알림이 뜹니다"
+                      : ""}
+                  </span>
+                </>
+              ) : (
+                <span className="consult-hint">{consultText(row.consult_at) || "아직 정하지 않음"}</span>
+              )}
+            </div>
+          ) : null}
           <span className={"savetag savetag-" + (props.admin ? (saveState || "idle") : "idle")}>
             {!props.admin
               ? "보기 전용"
@@ -3657,6 +3770,13 @@ const CSS = `
 .made-hint { margin: 12px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
 
 .status-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.consult-row { order: 9; flex-basis: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 4px; padding-top: 10px; border-top: 1px dashed #EDE6E8; }
+.consult-inp { display: inline-block; width: auto; margin-top: 0; font-size: 14px; padding: 6px 9px; }
+.consult-clear { font: inherit; font-size: 12px; padding: 4px 9px; border-radius: 8px; border: 1px solid #E5E0E1;
+  background: #fff; color: var(--muted); cursor: pointer; }
+.consult-hint { font-size: 12px; color: var(--muted); }
+.consult-when { font-weight: 700; color: var(--pkd); }
 .pub-label.inline { margin: 0; white-space: nowrap; }
 .savetag { margin-left: auto; font-size: 11px; padding: 3px 9px; border-radius: 8px;
   background: #F2F2F0; color: #8A857D; white-space: nowrap; }
