@@ -96,6 +96,32 @@ function consultText(iso) {
   return "상담 " + (x.getMonth() + 1) + "/" + x.getDate() + "(" + CONSULT_WD[x.getDay()] + ") " + c.t;
 }
 
+/* ★ 인쇄 · PDF 저장할 때 파일 이름이 되는 제목을 잠깐 바꿨다가 인쇄 창을 닫으면 되돌린다
+   시간표 앱 '설문' 메뉴 안(틀 안)에서 인쇄하면 PDF 이름이 바깥 창 제목("검단ABA 수업 시간표")을 따라가므로 바깥 제목도 같이 바꾼다 */
+let printBase = null; // 처음 제목을 기억 — 인쇄 창 닫힘 신호가 안 오는 기기에서도 원래 제목으로 돌아가게
+function printAs(title) {
+  const name = String(title || "").replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim();
+  const docs = [document];
+  try {
+    if (window.parent && window.parent !== window && window.parent.document) docs.push(window.parent.document);
+  } catch (e) {}
+  if (!printBase) printBase = docs.map(function (d) { return d.title; });
+  const olds = printBase;
+  let done = false;
+  const back = function () {
+    if (done) return;
+    done = true;
+    docs.forEach(function (d, i) { try { if (olds[i]) d.title = olds[i]; } catch (e) {} });
+    window.removeEventListener("afterprint", back);
+    document.removeEventListener("pointerdown", back, true);
+  };
+  if (name) docs.forEach(function (d) { try { d.title = name; } catch (e) {} });
+  window.addEventListener("afterprint", back);
+  window.print();
+  // 인쇄 창이 닫힌 뒤 화면을 누르면 확실히 되돌림 (afterprint가 안 오는 경우 대비)
+  setTimeout(function () { document.addEventListener("pointerdown", back, true); }, 0);
+}
+
 /* ══════════════════════════════════════════════════════════════════
    1. Supabase 접근
    ══════════════════════════════════════════════════════════════════ */
@@ -2604,15 +2630,17 @@ function InquirySheet(props) {
         <div className="sheet-head">
           <h2>
             {row.child_name} · 상담 신청
-            <em>
+            <em className="screen-only">
               {new Date(row.created_at).toLocaleString("ko-KR")} · {row.phone}
             </em>
+            {/* ★ 인쇄할 때는 보낸 시각 대신 상담예정 날짜·시간만 (안 적었으면 비움) */}
+            <em className="print-only">{consultText(consultIso(consultD, consultT) || row.consult_at)}</em>
           </h2>
           <div className="sheet-btns">
             <button
               className="ghost"
               onClick={function () {
-                window.print();
+                printAs("상담신청서_" + (row.child_name || ""));
               }}
             >
               인쇄
@@ -2730,6 +2758,8 @@ function InquirySheet(props) {
                 if (props.admin) onMemoChange(e.target.value);
               }}
             />
+            {/* ★ 인쇄용 메모 칸 — 안내 글 없이 빈 칸, 적은 메모는 끝까지 다 찍힘 */}
+            <div className="print-only memo-print">{memo}</div>
             <p className="pool-hint">
               {!props.admin
                 ? "원장님이 작성하는 칸입니다."
@@ -3311,7 +3341,7 @@ function SurveyTab(props) {
                 <button
                   className="ghost"
                   onClick={function () {
-                    window.print();
+                    printAs("강화제설문_" + (open.child_name || ""));
                   }}
                 >
                   인쇄
@@ -3835,6 +3865,7 @@ const CSS = `
 .detail-row dt { font-size: 14px; color: var(--muted); margin-bottom: 5px; }
 .detail-row dd { margin: 0; font-size: 15px; line-height: 1.7; }
 
+.print-only { display: none !important; }
 @media print {
   .app { background: #fff; }
   .hero, .tabs, .rows, .sheet-btns, .submit, .ghost, .admin-box, .pub, .filter,
@@ -3846,6 +3877,12 @@ const CSS = `
   .memo-pad { min-height: 0 !important; border: 1px solid var(--line) !important;
     background: #fff !important; height: auto !important; }
   .modal { position: static; background: none; display: block; }
+  /* ★ 상담 신청서 인쇄 — 보낸 시각·안내 문구는 빼고 상담예정·빈 메모 칸만 */
+  .screen-only, .split-side .memo-pad, .split-side .pool-hint { display: none !important; }
+  em.print-only { display: block !important; }
+  div.print-only { display: block !important; }
+  .memo-print { min-height: 60pt; border: 1px solid var(--line); border-radius: 10px;
+    padding: 8pt 10pt; font-size: 11pt; line-height: 1.7; white-space: pre-wrap; word-break: break-all; }
   .sheet { max-height: none; overflow: visible; border-radius: 0; padding: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
