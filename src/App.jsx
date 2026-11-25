@@ -2442,6 +2442,48 @@ function InquirySheet(props) {
     }, 800);
   }
 
+  /* ★ 소견 및 권고 — [칸 추가]로 원장이 만드는 칸. 화면에만 보이고 인쇄되지 않는다.
+     메모와 따로 저장해서, 이 칸 저장이 실패해도 상담 메모 저장에는 영향이 없다. */
+  const [notes, setNotes] = useState(Array.isArray(row.notes) ? row.notes : []);
+  const [noteSave, setNoteSave] = useState("");   // "" | saving | saved | error
+  const noteTimer = useRef(null);
+  useEffect(function () {
+    return function () {
+      if (noteTimer.current) clearTimeout(noteTimer.current);
+    };
+  }, []);
+  function saveNotes(list, wait) {
+    setNotes(list);
+    setNoteSave("saving");
+    if (noteTimer.current) clearTimeout(noteTimer.current);
+    noteTimer.current = setTimeout(function () {
+      patchInquiry(row.id, { notes: list })
+        .then(function (updated) {
+          setNoteSave("saved");
+          if (updated) props.onSaved(updated);
+        })
+        .catch(function () {
+          setNoteSave("error");
+        });
+    }, wait);
+  }
+  function addNote() {
+    saveNotes(notes.concat([{ title: "소견 및 권고", text: "" }]), 0);
+  }
+  function editNote(i, key, v) {
+    const list = notes.map(function (n, j) {
+      return j === i ? Object.assign({}, n, { [key]: v }) : n;
+    });
+    saveNotes(list, 800);
+  }
+  function removeNote(i) {
+    const n = notes[i];
+    if (n && (n.text || "").trim()) {
+      if (!window.confirm("'" + (n.title || "이 칸") + "' 칸을 지울까요? 적은 내용도 함께 지워집니다.")) return;
+    }
+    saveNotes(notes.filter(function (_, j) { return j !== i; }), 0);
+  }
+
   function onStatusPick(v) {
     setStatus(v);
     latest.current.status = v;
@@ -2771,6 +2813,65 @@ function InquirySheet(props) {
                 ? "저장하지 못했습니다. 인터넷 연결을 확인해 주세요."
                 : "적으시면 자동으로 저장됩니다."}
             </p>
+
+            {/* ★ 소견 및 권고 — 인쇄 안 됨(screen-only) */}
+            {props.admin || notes.length ? (
+              <div className="screen-only note-area">
+                {notes.map(function (n, i) {
+                  return (
+                    <div className="note-box" key={i}>
+                      <div className="note-head">
+                        <input
+                          className="note-title"
+                          value={n.title || ""}
+                          readOnly={!props.admin}
+                          placeholder="칸 이름"
+                          onChange={function (e) {
+                            if (props.admin) editNote(i, "title", e.target.value);
+                          }}
+                        />
+                        <span className="note-np">인쇄 안 됨</span>
+                        {props.admin ? (
+                          <button
+                            className="note-del"
+                            aria-label="칸 지우기"
+                            title="칸 지우기"
+                            onClick={function () {
+                              removeNote(i);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        ) : null}
+                      </div>
+                      <textarea
+                        className="inp ta note-pad"
+                        readOnly={!props.admin}
+                        placeholder={props.admin ? "여기에 적으면 자동으로 저장됩니다." : ""}
+                        value={n.text || ""}
+                        onChange={function (e) {
+                          if (props.admin) editNote(i, "text", e.target.value);
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+                {props.admin ? (
+                  <button className="ghost note-add" onClick={addNote}>
+                    + 칸 추가 (인쇄 안 됨)
+                  </button>
+                ) : null}
+                {noteSave ? (
+                  <p className="pool-hint">
+                    {noteSave === "saving"
+                      ? "저장 중…"
+                      : noteSave === "saved"
+                      ? "✓ 저장되었습니다"
+                      : "저장하지 못했습니다. 인터넷 연결을 확인해 주세요."}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </aside>
         </div>
 
@@ -3864,6 +3965,20 @@ const CSS = `
 .detail-row { padding: 11px 0; border-bottom: 1px solid var(--line); }
 .detail-row dt { font-size: 14px; color: var(--muted); margin-bottom: 5px; }
 .detail-row dd { margin: 0; font-size: 15px; line-height: 1.7; }
+
+.note-area { margin-top: 18px; }
+.note-box { margin-top: 14px; }
+.note-head { display: flex; align-items: center; gap: 6px; }
+.note-title { flex: 1; min-width: 0; font: inherit; font-size: 13px; color: var(--pkd);
+  border: 1px dashed transparent; border-radius: 8px; padding: 4px 6px; background: transparent; }
+.note-title:not([readonly]):hover, .note-title:focus { border-color: var(--pk); outline: none; background: #fff; }
+.note-np { flex: none; font-size: 11px; color: var(--muted); background: #f3f1ee;
+  padding: 2px 8px; border-radius: 6px; }
+.note-del { flex: none; font: inherit; font-size: 13px; width: 28px; height: 28px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--muted); cursor: pointer; }
+.note-del:hover { color: var(--pkd); border-color: var(--pk); }
+.note-pad { margin-top: 6px; min-height: 110px; }
+.note-add { width: 100%; margin-top: 14px; }
 
 .print-only { display: none !important; }
 @media print {
